@@ -15,6 +15,10 @@ var (
 	ErrTenantUpdateNotAllowed = errors.New("tenant_update_not_allowed")
 	ErrTenantVersionConflict  = errors.New("tenant_version_conflict")
 	ErrValidation             = errors.New("validation_error")
+
+	// ErrInvalidTransition means a status change breaks the state machine.
+	// It is never caused by client input, so the API does not expose it.
+	ErrInvalidTransition = errors.New("invalid_transition")
 )
 
 // ValidationError carries per-field messages. It matches ErrValidation

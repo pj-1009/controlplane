@@ -88,7 +88,8 @@ func TenantStatusAfterTask(current TenantStatus, t TaskType, result TaskStatus) 
 		return "", err
 	}
 	if current != pending {
-		return "", fmt.Errorf("tenant in status %q cannot finish a %s task (expected %q)", current, t, pending)
+		return "", fmt.Errorf("tenant in status %q cannot finish a %s task (expected %q): %w",
+			current, t, pending, ErrInvalidTransition)
 	}
 	switch result {
 	case TaskFailed:
@@ -99,5 +100,5 @@ func TenantStatusAfterTask(current TenantStatus, t TaskType, result TaskStatus) 
 		}
 		return TenantActive, nil
 	}
-	return "", fmt.Errorf("task status %q is not terminal", result)
+	return "", fmt.Errorf("task status %q is not terminal: %w", result, ErrInvalidTransition)
 }
