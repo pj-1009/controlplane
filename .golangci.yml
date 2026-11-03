@@ -1,0 +1,44 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - integration
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - errcheck
+    - errorlint
+    - gosec
+    - govet
+    - ineffassign
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-return
+        - name: error-naming
+        - name: error-strings
+        - name: errorf
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: unused-parameter
+        - name: blank-imports
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - controlplane

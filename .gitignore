@@ -1,0 +1,11 @@
+# Assignment prompts are not part of the deliverable.
+PROMPT.md
+PROMPT_GO.md
+
+# Local env overrides.
+.env
+
+# Build output.
+/bin/
+*.test
+*.out

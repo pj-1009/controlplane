@@ -1,0 +1,110 @@
+name: controlplane
+
+x-db-url: &db-url postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:-REDACTED}@postgres:5432/${POSTGRES_DB:-controlplane}?sslmode=disable
+x-amqp-url: &amqp-url amqp://${RABBITMQ_USER:-controlplane}:${RABBITMQ_PASSWORD:-REDACTED}@rabbitmq:5672/
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-controlplane}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REDACTED}
+      POSTGRES_DB: ${POSTGRES_DB:-controlplane}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-controlplane}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-REDACTED}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  controlplane:
+    build:
+      context: .
+      target: controlplane
+    environment:
+      HTTP_ADDR: ":8000"
+      DATABASE_URL: *db-url
+      AMQP_URL: *amqp-url
+      RELAY_INTERVAL: ${RELAY_INTERVAL:-500ms}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    # The image is distroless (no curl), so the binary checks its own /healthz.
+    healthcheck:
+      test: ["CMD", "/controlplane", "-healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      AMQP_URL: *amqp-url
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WORKER_FAIL_RATE: ${WORKER_FAIL_RATE:-0.0}
+      WORKER_MIN_DELAY_MS: ${WORKER_MIN_DELAY_MS:-500}
+      WORKER_MAX_DELAY_MS: ${WORKER_MAX_DELAY_MS:-2000}
+      WORKER_DUPLICATE_RATE: ${WORKER_DUPLICATE_RATE:-0.0}
+      WORKER_SKIP_IN_PROGRESS: ${WORKER_SKIP_IN_PROGRESS:-false}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Tooling containers, only started by make targets (profile "tools").
+  test:
+    image: golang:1.23
+    profiles: ["tools"]
+    working_dir: /src
+    environment:
+      TEST_DATABASE_URL: postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:-REDACTED}@postgres:5432/controlplane_test?sslmode=disable
+      TEST_ADMIN_DATABASE_URL: *db-url
+      TEST_AMQP_URL: *amqp-url
+      GOFLAGS: -buildvcs=false
+    volumes:
+      - .:/src
+      - gomodcache:/go/pkg/mod
+      - gobuildcache:/root/.cache/go-build
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  racetest:
+    build:
+      context: .
+      target: racetest
+    profiles: ["tools"]
+    environment:
+      API_URL: http://controlplane:8000
+
+volumes:
+  pgdata:
+  gomodcache:
+  gobuildcache:
