@@ -44,6 +44,7 @@ Step-by-step guides are in [`docs/`](docs/README.md):
 - [Setup](docs/setup.md)
 - [Create a tenant](docs/create-tenant.md)
 - [Create a tenant and see it fail](docs/create-tenant-errors.md)
+- [Update a tenant](docs/update-tenant.md)
 - [Delete a tenant](docs/delete-tenant.md)
 - [Error messages](docs/errors.md)
 

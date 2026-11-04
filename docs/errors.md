@@ -48,7 +48,7 @@ and one table maps each to an HTTP status.
 | `POST /tenants` | 201 | 409 `tenant_already_exists`, 422 `validation_error` |
 | `GET /tenants` | 200 | 422 `validation_error` (bad `status`, `limit` or `cursor`) |
 | `GET /tenants/{id}` | 200 | 404 `tenant_not_found` |
-| `PATCH /tenants/{id}` | 202 | 404 `tenant_not_found`, 409 `tenant_update_not_allowed`, 409 `tenant_version_conflict`, 422 `validation_error` |
+| `PATCH /tenants/{id}` | 202 | 404 `tenant_not_found`, 409 `tenant_update_not_allowed`, 409 `tenant_version_conflict`, 422 `validation_error` (see [Update a tenant](update-tenant.md)) |
 | `DELETE /tenants/{id}` | 202 | 404 `tenant_not_found`, 409 `tenant_update_not_allowed` |
 | `GET /tasks` | 200 | 422 `validation_error` (bad `tenant_id`, `status`, `type`, `limit` or `cursor`) |
 | `GET /tasks/{id}` | 200 | 404 `task_not_found` |
