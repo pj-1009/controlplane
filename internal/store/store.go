@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,18 +40,23 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 // Connect opens a pool and verifies the connection, retrying until ctx is
-// done so the process can start before the database is ready.
-func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
+// done so the process can start before the database is ready. Each failed
+// attempt is logged, so a wrong password or host shows up in the logs
+// instead of looking like a silent hang.
+func Connect(ctx context.Context, url string, logger *slog.Logger) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}
 	delay := 250 * time.Millisecond
-	for {
+	for attempt := 1; ; attempt++ {
 		err := pool.Ping(ctx)
 		if err == nil {
+			logger.InfoContext(ctx, "database connected", "attempts", attempt)
 			return pool, nil
 		}
+		logger.WarnContext(ctx, "database not ready, retrying",
+			"attempt", attempt, "retry_in", delay.String(), "error", err)
 		select {
 		case <-ctx.Done():
 			pool.Close()

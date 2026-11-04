@@ -58,9 +58,17 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"   # the deploy task, "status":"don
 Configuration comes from environment variables, which compose reads from `.env`.
 The passwords have no default. Compose refuses to start without them, and `make`
 generates them, so no secret lives in the repo. Every other setting has a
-default in `docker-compose.yml`. Postgres and RabbitMQ store the password on
-first boot, so if you change a password or delete `.env`, run
-`make clean && make up`. That also wipes the local database.
+default in `docker-compose.yml`.
+
+**`.env` and the database volume belong together.** Postgres sets its password
+only on first boot, when the `pgdata` volume is empty, and keeps it after that.
+A different `.env` against an existing volume makes the control plane log
+`database not ready, retrying … password authentication failed` and never turn
+healthy. That happens if you delete `.env`, change a password, or run a second
+checkout of the repo (both use the compose project `controlplane`, so they
+share the volume). Fix it with `make clean && make up`, which deletes the
+volume, and the local data with it, so Postgres starts again with the current
+`.env`.
 
 ## Architecture
 
