@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/domain"
 )
 
 const tenantColumns = `id, slug, name, status, version, created_at, updated_at`

@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/migrations"
+	"github.com/pj-1009/controlplane/migrations"
 )
 
 // Env var names set by the "test" service in docker-compose.yml.

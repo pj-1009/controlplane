@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/domain"
 )
 
 // Error codes that are not domain errors.

@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"controlplane/internal/domain"
-	"controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 // Store is the persistence the API needs.

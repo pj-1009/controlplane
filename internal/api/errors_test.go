@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/internal/domain"
-	"controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 // panicStore panics on GetTenant and fails everything else with a raw error,

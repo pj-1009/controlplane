@@ -18,10 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/internal/api"
-	"controlplane/internal/domain"
-	"controlplane/internal/store"
-	"controlplane/internal/testutil"
+	"github.com/pj-1009/controlplane/internal/api"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/testutil"
 )
 
 var timestampPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)

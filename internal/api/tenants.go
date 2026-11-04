@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"controlplane/internal/domain"
-	"controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 type createTenantRequest struct {

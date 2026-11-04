@@ -41,7 +41,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - controlplane
+        - github.com/pj-1009/controlplane
 
 issues:
   # Show every finding instead of the default first 3 per kind.

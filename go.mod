@@ -1,4 +1,4 @@
-module controlplane
+module github.com/pj-1009/controlplane
 
 go 1.26.0
 

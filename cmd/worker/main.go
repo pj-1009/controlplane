@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"controlplane/internal/broker"
-	"controlplane/internal/config"
-	"controlplane/internal/worker"
+	"github.com/pj-1009/controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/config"
+	"github.com/pj-1009/controlplane/internal/worker"
 )
 
 func main() {

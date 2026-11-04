@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/domain"
 )
 
 const taskColumns = `id, type, tenant_id, status, error, created_at, updated_at`

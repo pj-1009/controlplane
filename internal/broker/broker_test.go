@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/internal/broker"
-	"controlplane/internal/testutil"
+	"github.com/pj-1009/controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/testutil"
 )
 
 func TestPublishPersistentWithConfirm(t *testing.T) {

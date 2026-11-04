@@ -16,13 +16,13 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"controlplane/internal/api"
-	"controlplane/internal/broker"
-	"controlplane/internal/config"
-	"controlplane/internal/consumer"
-	"controlplane/internal/outbox"
-	"controlplane/internal/store"
-	"controlplane/migrations"
+	"github.com/pj-1009/controlplane/internal/api"
+	"github.com/pj-1009/controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/config"
+	"github.com/pj-1009/controlplane/internal/consumer"
+	"github.com/pj-1009/controlplane/internal/outbox"
+	"github.com/pj-1009/controlplane/internal/store"
+	"github.com/pj-1009/controlplane/migrations"
 )
 
 const shutdownTimeout = 10 * time.Second

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 // BatchSize is how many outbox rows one relay pass claims.

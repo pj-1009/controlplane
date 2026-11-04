@@ -10,7 +10,7 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"controlplane/internal/retry"
+	"github.com/pj-1009/controlplane/internal/retry"
 )
 
 // ErrNotConnected is returned by Connected when there is no live connection.

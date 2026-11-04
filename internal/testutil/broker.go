@@ -14,7 +14,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/broker"
 )
 
 // EnvRabbitMgmtURL is the RabbitMQ management API base URL, with credentials.

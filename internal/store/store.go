@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/domain"
 )
 
 const (

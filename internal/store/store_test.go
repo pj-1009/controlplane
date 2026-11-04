@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/internal/domain"
-	"controlplane/internal/testutil"
-	"controlplane/migrations"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/testutil"
+	"github.com/pj-1009/controlplane/migrations"
 )
 
 func newStore(t *testing.T) (*Store, *pgxpool.Pool) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/domain"
 )
 
 // DefaultLimit and MaxLimit bound list page sizes.

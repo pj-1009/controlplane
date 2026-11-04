@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"controlplane/internal/broker"
-	"controlplane/internal/domain"
-	"controlplane/internal/outbox"
-	"controlplane/internal/store"
-	"controlplane/internal/testutil"
+	"github.com/pj-1009/controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/outbox"
+	"github.com/pj-1009/controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/testutil"
 )
 
 func TestRelayPublishesAndMarksSent(t *testing.T) {

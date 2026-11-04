@@ -11,10 +11,10 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"controlplane/internal/broker"
-	"controlplane/internal/domain"
-	"controlplane/internal/retry"
-	"controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/retry"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 // Prefetch is how many unacked updates the broker hands us at once.

@@ -15,8 +15,8 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"controlplane/internal/broker"
-	"controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/broker"
+	"github.com/pj-1009/controlplane/internal/domain"
 )
 
 // Config controls the simulated behavior.
