@@ -43,7 +43,7 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"   # the deploy task, "status":"don
 | `make down` | Stop and remove containers. The Postgres volume is kept. |
 | `make clean` | Also remove volumes (database, Go caches) |
 | `make logs` | Follow all logs |
-| `make test` | `go test -race -p 1 -count=1 -tags integration ./...` in a `golang:1.26` container on the compose network |
+| `make test` | `go test -race -p 1 -count=1 -v -tags integration ./...` in a `golang:1.26` container on the compose network; output is also saved to `test-results/test-<timestamp>.txt` |
 | `make check` | golangci-lint (incl. gofmt/goimports check and gosec), govulncheck, then `make test` |
 | `make fmt` | Rewrite files with gofmt + goimports (via `golangci-lint fmt`) |
 | `make worker-fail` | Recreate the worker with `WORKER_FAIL_RATE=1` (every task fails) |
@@ -521,7 +521,9 @@ status or its new version first. Either way they change nothing.
 ## Tests
 
 `make test` runs `go test -race` over every package against the real Postgres
-and RabbitMQ from compose.
+and RabbitMQ from compose. The verbose output (every test by name, with
+`PASS`/`FAIL`) is printed and also saved to `test-results/test-<timestamp>.txt`,
+one file per run. That folder is git-ignored.
 
 - **Unit tests**:
   - table-driven tests for every allowed and forbidden task and tenant transition

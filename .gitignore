@@ -9,3 +9,6 @@ PROMPT_GO.md
 /bin/
 *.test
 *.out
+
+# Saved test output from make test.
+/test-results/
