@@ -85,6 +85,7 @@ services:
       TEST_DATABASE_URL: postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:-REDACTED}@postgres:5432/controlplane_test?sslmode=disable
       TEST_ADMIN_DATABASE_URL: *db-url
       TEST_AMQP_URL: *amqp-url
+      TEST_RABBITMQ_MGMT_URL: http://${RABBITMQ_USER:-controlplane}:${RABBITMQ_PASSWORD:-REDACTED}@rabbitmq:15672
       GOFLAGS: -buildvcs=false
     volumes:
       - .:/src

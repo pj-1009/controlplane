@@ -16,7 +16,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"controlplane/internal/api"
+	"controlplane/internal/broker"
 	"controlplane/internal/config"
+	"controlplane/internal/outbox"
 	"controlplane/internal/store"
 	"controlplane/migrations"
 )
@@ -59,16 +61,25 @@ func run() error {
 	logger.Info("migrations applied", "new", applied)
 
 	st := store.New(pool)
+	conn := broker.NewConn(cfg.AMQPURL, "controlplane", broker.DefaultTopology(), logger)
+	relay := outbox.NewRelay(st, broker.NewPublisher(conn), conn.Topology().Tasks, cfg.RelayInterval, logger)
+
 	srv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewRouter(st, logger, api.HealthCheck{Name: "database", Check: st.Ping}),
+		Addr: cfg.HTTPAddr,
+		Handler: api.NewRouter(st, logger,
+			api.HealthCheck{Name: "database", Check: st.Ping},
+			api.HealthCheck{Name: "broker", Check: conn.Connected},
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 
+	// One shared context: a signal, or any component failing, stops them all.
 	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return conn.Run(ctx) })
+	g.Go(func() error { return relay.Run(ctx) })
 	g.Go(func() error {
 		logger.Info("http server listening", "addr", cfg.HTTPAddr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
