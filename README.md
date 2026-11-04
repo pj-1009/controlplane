@@ -100,25 +100,37 @@ sequenceDiagram
     participant W as Worker
     participant U as Update consumer
 
-    C->>API: POST /tenants {slug, name}
-    API->>DB: BEGIN; INSERT tenant (provisioning, v1);<br/>INSERT task (deploy, accepted); INSERT outbox; COMMIT
+    C->>API: POST /tenants (slug, name)
+    rect rgba(128, 128, 128, 0.1)
+        Note over API,DB: one transaction
+        API->>DB: INSERT tenant (provisioning, v1)
+        API->>DB: INSERT task (deploy, accepted)
+        API->>DB: INSERT outbox row
+    end
     API-->>C: 201 tenant (provisioning)
+
     loop every 500ms
         R->>DB: SELECT unsent outbox rows FOR UPDATE SKIP LOCKED
-        R->>Q: publish to "tasks" (persistent, MessageId = task id)
+        R->>Q: publish to tasks (persistent)
         Q-->>R: publisher confirm
-        R->>DB: UPDATE outbox SET sent_at = now(); COMMIT
+        R->>DB: UPDATE outbox SET sent_at = now()
     end
+
     Q->>W: task message
-    W->>W: sleep (random delay)
-    W->>Q: update {task_id}:in_progress
-    W->>W: sleep
-    W->>Q: update {task_id}:done
-    W->>Q: Ack task (after confirms)
+    W->>Q: update in_progress (after a random delay)
+    W->>Q: update done (after a random delay)
+    W->>Q: Ack task message
+
     Q->>U: update messages
-    U->>DB: BEGIN; INSERT processed_messages;<br/>UPDATE task (forward only);<br/>if terminal: UPDATE tenant → active, v2; COMMIT
+    rect rgba(128, 128, 128, 0.1)
+        Note over U,DB: one transaction per update
+        U->>DB: INSERT processed_messages (skip if duplicate)
+        U->>DB: UPDATE task status (forward only)
+        U->>DB: on done, UPDATE tenant to active, v2
+    end
     U->>Q: Ack
-    C->>API: GET /tenants/{id}
+
+    C->>API: GET /tenants/id
     API-->>C: 200 tenant (active, v2)
 ```
 
