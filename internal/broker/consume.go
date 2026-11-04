@@ -41,13 +41,22 @@ func consumeChannel(ctx context.Context, ch *amqp.Channel, queue string, prefetc
 	if err := ch.Qos(prefetch, 0, false); err != nil {
 		return fmt.Errorf("set qos: %w", err)
 	}
-	deliveries, err := ch.ConsumeWithContext(ctx, queue, "", false, false, false, false, nil)
+	// Plain Consume, not ConsumeWithContext: the latter sends its own cancel
+	// RPC when ctx ends, which can deadlock with the Close in Consume.
+	deliveries, err := ch.Consume(queue, "", false, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("consume %s: %w", queue, err)
 	}
 	for {
 		select {
 		case <-ctx.Done():
+			// amqp091 blocks Channel.Close while prefetched deliveries sit
+			// unread, so keep draining until the library closes the stream.
+			// Unacked messages go back to the queue when the channel closes.
+			go func() {
+				for range deliveries {
+				}
+			}()
 			return nil
 		case d, ok := <-deliveries:
 			if !ok {
