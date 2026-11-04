@@ -42,3 +42,8 @@ formatters:
     goimports:
       local-prefixes:
         - controlplane
+
+issues:
+  # Show every finding instead of the default first 3 per kind.
+  max-issues-per-linter: 0
+  max-same-issues: 0

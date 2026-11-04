@@ -79,7 +79,7 @@ func ensureDatabase(ctx context.Context, adminURL, dbURL string) error {
 	if err != nil {
 		return fmt.Errorf("connect admin database: %w", err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	var exists bool
 	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)`, name).Scan(&exists); err != nil {
