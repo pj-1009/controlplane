@@ -1,14 +1,14 @@
 name: controlplane
 
-x-db-url: &db-url postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:-REDACTED}@postgres:5432/${POSTGRES_DB:-controlplane}?sslmode=disable
-x-amqp-url: &amqp-url amqp://${RABBITMQ_USER:-controlplane}:${RABBITMQ_PASSWORD:-REDACTED}@rabbitmq:5672/
+x-db-url: &db-url postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:?run make to create .env}@postgres:5432/${POSTGRES_DB:-controlplane}?sslmode=disable
+x-amqp-url: &amqp-url amqp://${RABBITMQ_USER:-controlplane}:${RABBITMQ_PASSWORD:?run make to create .env}@rabbitmq:5672/
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-controlplane}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REDACTED}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run make to create .env}
       POSTGRES_DB: ${POSTGRES_DB:-controlplane}
     ports:
       - "5432:5432"
@@ -24,7 +24,7 @@ services:
     image: rabbitmq:3.13-management
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-controlplane}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-REDACTED}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?run make to create .env}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -82,10 +82,10 @@ services:
     profiles: ["tools"]
     working_dir: /src
     environment:
-      TEST_DATABASE_URL: postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:-REDACTED}@postgres:5432/controlplane_test?sslmode=disable
+      TEST_DATABASE_URL: postgres://${POSTGRES_USER:-controlplane}:${POSTGRES_PASSWORD:?run make to create .env}@postgres:5432/controlplane_test?sslmode=disable
       TEST_ADMIN_DATABASE_URL: *db-url
       TEST_AMQP_URL: *amqp-url
-      TEST_RABBITMQ_MGMT_URL: http://${RABBITMQ_USER:-controlplane}:${RABBITMQ_PASSWORD:-REDACTED}@rabbitmq:15672
+      TEST_RABBITMQ_MGMT_URL: http://${RABBITMQ_USER:-controlplane}:${RABBITMQ_PASSWORD:?run make to create .env}@rabbitmq:15672
       GOFLAGS: -buildvcs=false
     volumes:
       - .:/src

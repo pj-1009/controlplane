@@ -14,23 +14,32 @@ DOCKER_GO := docker run --rm -v "$(CURDIR)":/src -w /src \
 
 .PHONY: up down clean logs test check lint vuln fmt worker-fail worker-normal race publish
 
-up: ## Build and boot the whole stack, wait until healthy.
+# .env holds the local passwords and is git-ignored. It is created once from
+# .env.example with random passwords. Delete it only together with the volumes
+# (make clean), because Postgres and RabbitMQ keep the password from first boot.
+.env:
+	@umask 077; awk -v pg="$$(openssl rand -hex 16)" -v mq="$$(openssl rand -hex 16)" \
+		'/^POSTGRES_PASSWORD=/ { $$0 = "POSTGRES_PASSWORD=" pg } \
+		 /^RABBITMQ_PASSWORD=/ { $$0 = "RABBITMQ_PASSWORD=" mq } { print }' .env.example > $@
+	@echo "Created .env with random passwords (git-ignored)."
+
+up: .env ## Build and boot the whole stack, wait until healthy.
 	$(COMPOSE) up --build -d --wait
 	@echo ""
 	@echo "Control plane API:  http://localhost:8000  (health: /healthz)"
-	@echo "RabbitMQ UI:        http://localhost:15672 (controlplane / REDACTED)"
+	@echo "RabbitMQ UI:        http://localhost:15672 (user and password are in .env)"
 
-down: ## Stop and remove containers, keep volumes.
+down: .env ## Stop and remove containers, keep volumes.
 	$(COMPOSE) down
 
-clean: ## Stop containers and remove volumes.
+clean: .env ## Stop containers and remove volumes.
 	$(COMPOSE) --profile tools down -v
 	docker volume rm -f $(TOOL_VOLUMES)
 
-logs: ## Follow logs from all services.
+logs: .env ## Follow logs from all services.
 	$(COMPOSE) logs -f
 
-test: ## Run the full test suite (with -race) against postgres + rabbitmq.
+test: .env ## Run the full test suite (with -race) against postgres + rabbitmq.
 	@mkdir -p test-results
 	$(COMPOSE) up -d --wait postgres rabbitmq
 	@# Verbose output goes to the terminal and to a timestamped file; pipefail
@@ -50,14 +59,14 @@ check: lint vuln test ## Lint (incl. format + gosec), govulncheck, then tests.
 fmt: ## Auto-format with gofmt + goimports.
 	$(DOCKER_GO) -v controlplane-tools-lint:/root/.cache/golangci-lint $(LINT_IMAGE) golangci-lint fmt ./...
 
-worker-fail: ## Restart the worker so every task fails.
+worker-fail: .env ## Restart the worker so every task fails.
 	WORKER_FAIL_RATE=1 $(COMPOSE) up -d --no-deps --force-recreate worker
 
-worker-normal: ## Restart the worker with default settings.
+worker-normal: .env ## Restart the worker with default settings.
 	$(COMPOSE) up -d --no-deps --force-recreate worker
 
-race: ## Hammer the running API with concurrent creates and PATCHes.
+race: .env ## Hammer the running API with concurrent creates and PATCHes.
 	$(COMPOSE) run --rm --build racetest
 
-publish: ## Publish a hand-written update, e.g. make publish ARGS="poison".
+publish: .env ## Publish a hand-written update, e.g. make publish ARGS="poison".
 	./scripts/publish_update.sh $(ARGS)

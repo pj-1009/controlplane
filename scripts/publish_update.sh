@@ -13,8 +13,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-RABBITMQ_USER="${RABBITMQ_USER:-controlplane}"
-RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-REDACTED}"
 QUEUE="${QUEUE:-task_updates}"
 
 usage() {
@@ -25,11 +23,14 @@ usage() {
 publish() {
   local body="$1"
   echo "publishing to ${QUEUE}: ${body}"
-  docker compose exec -T rabbitmq rabbitmqadmin \
-    -u "$RABBITMQ_USER" -p "$RABBITMQ_PASSWORD" \
-    publish exchange=amq.default routing_key="$QUEUE" \
-    properties='{"content_type":"application/json","delivery_mode":2}' \
-    payload="$body"
+  # The login comes from the rabbitmq container's own environment (set from
+  # .env by compose), so this script never handles the password. The queue
+  # and body are passed as positional arguments to avoid quoting issues.
+  docker compose exec -T rabbitmq sh -c \
+    'rabbitmqadmin -u "$RABBITMQ_DEFAULT_USER" -p "$RABBITMQ_DEFAULT_PASS" \
+      publish exchange=amq.default routing_key="$1" \
+      properties="{\"content_type\":\"application/json\",\"delivery_mode\":2}" \
+      payload="$2"' _ "$QUEUE" "$body"
 }
 
 now() {

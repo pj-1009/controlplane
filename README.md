@@ -22,7 +22,11 @@ make test    # run the full test suite (-race) in a golang container against the
 `make up` prints the URLs:
 
 - API: <http://localhost:8000> (health: <http://localhost:8000/healthz>)
-- RabbitMQ management UI: <http://localhost:15672> (`controlplane` / `REDACTED`)
+- RabbitMQ management UI: <http://localhost:15672> (log in with `RABBITMQ_USER` / `RABBITMQ_PASSWORD` from `.env`)
+
+The first `make` run creates `.env` from `.env.example` and fills in random
+Postgres and RabbitMQ passwords. `.env` is git-ignored, so no password is ever
+committed.
 
 Create a tenant and watch it become active:
 
@@ -51,9 +55,12 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"   # the deploy task, "status":"don
 | `make race` | Run `cmd/racetest` against the running API |
 | `make publish ARGS="…"` | Publish a hand-written update (see [Negative scenarios](#negative-scenarios)) |
 
-Configuration comes from environment variables. Every one has a local default
-in `docker-compose.yml`. Copy `.env.example` to `.env` to override them. No
-secrets live in the repo.
+Configuration comes from environment variables, which compose reads from `.env`.
+The passwords have no default. Compose refuses to start without them, and `make`
+generates them, so no secret lives in the repo. Every other setting has a
+default in `docker-compose.yml`. Postgres and RabbitMQ store the password on
+first boot, so if you change a password or delete `.env`, run
+`make clean && make up`. That also wipes the local database.
 
 ## Architecture
 
