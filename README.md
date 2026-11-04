@@ -6,7 +6,7 @@ consumes tasks, fakes slow provisioning and reports progress back over
 RabbitMQ. The control plane consumes those updates and advances task and
 tenant state.
 
-- **Go 1.23**, standard library first: `net/http` + chi, `log/slog`, `embed`
+- **Go 1.26**, standard library first: `net/http` + chi, `log/slog`, `embed`
 - **PostgreSQL 16** through pgx (plain SQL, no ORM)
 - **RabbitMQ 3.13** through amqp091-go
 - Everything runs in Docker. The host needs only Docker and make.
@@ -43,7 +43,7 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"   # the deploy task, "status":"don
 | `make down` | Stop and remove containers. The Postgres volume is kept. |
 | `make clean` | Also remove volumes (database, Go caches) |
 | `make logs` | Follow all logs |
-| `make test` | `go test -race -p 1 -count=1 -tags integration ./...` in a `golang:1.23` container on the compose network |
+| `make test` | `go test -race -p 1 -count=1 -tags integration ./...` in a `golang:1.26` container on the compose network |
 | `make check` | golangci-lint (incl. gofmt/goimports check and gosec), govulncheck, then `make test` |
 | `make fmt` | Rewrite files with gofmt + goimports (via `golangci-lint fmt`) |
 | `make worker-fail` | Recreate the worker with `WORKER_FAIL_RATE=1` (every task fails) |
@@ -244,6 +244,14 @@ the relay and consumer stop. In-flight updates finish under their own short
 timeout. They scale independently later if needed (see limitations). The
 relay already uses `SKIP LOCKED`, so several instances wouldn't send the same
 row at once.
+
+**Go 1.26 rather than 1.23.** The original brief pinned Go 1.23. That
+release is end-of-life, and `govulncheck` reports dozens of reachable
+standard-library vulnerabilities in it (crypto/tls, crypto/x509, net/http, …)
+that will never be fixed on that line. Some are only fixed in Go 1.26.x, so
+this project uses Go 1.26 with current chi, pgx, amqp091-go and x/text, and
+`make check` reports no vulnerabilities. The only code change it needed was
+fixing the healthcheck probe to loopback, which the newer gosec asked for.
 
 **Pagination.** The cursor is an opaque base64 encoding of
 `(created_at, id)` at full timestamp precision. Lists are ordered by that
@@ -582,8 +590,3 @@ Integration tests carry the `integration` build tag, so
   can miss a row whose transaction committed after a later-timestamped one
   was already paged past. This is acceptable for an admin listing.
 - **Auth, rate limiting, multi-region:** out of scope.
-- **Go version and govulncheck:** the spec pins Go 1.23, which is end-of-life.
-  `govulncheck` reports reachable standard-library vulnerabilities (crypto/tls,
-  crypto/x509, net/http, …) that are only fixed in Go ≥ 1.24.8/1.25, plus
-  older pgx and x/text versions. Upgrading the toolchain fixes the stdlib
-  findings without code changes.

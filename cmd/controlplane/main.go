@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -104,15 +105,14 @@ func run() error {
 // probeHealth exits 0 if the local API reports healthy. The runtime image has
 // no shell or curl, so the binary checks itself.
 func probeHealth() int {
-	addr := os.Getenv("HTTP_ADDR")
-	if addr == "" {
-		addr = ":8000"
+	// Only the port comes from the environment; the host is always loopback.
+	_, port, err := net.SplitHostPort(os.Getenv("HTTP_ADDR"))
+	if err != nil || port == "" {
+		port = "8000"
 	}
-	if addr[0] == ':' {
-		addr = "localhost" + addr
-	}
+	url := "http://" + net.JoinHostPort("127.0.0.1", port) + "/healthz"
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://" + addr + "/healthz")
+	resp, err := client.Get(url) //nolint:gosec // G704: host is fixed to loopback, only the port is configurable
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "healthcheck:", err)
 		return 1

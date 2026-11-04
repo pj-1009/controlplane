@@ -78,7 +78,7 @@ services:
 
   # Tooling containers, only started by make targets (profile "tools").
   test:
-    image: golang:1.23
+    image: golang:1.26
     profiles: ["tools"]
     working_dir: /src
     environment:
