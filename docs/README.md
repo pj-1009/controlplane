@@ -10,6 +10,7 @@ Step-by-step guides for running and using the control plane. The main
 | [Create a tenant and see it fail](create-tenant-errors.md) | Every way creation is rejected, and how to make provisioning itself fail |
 | [Update a tenant](update-tenant.md) | Rename a tenant, why repeated or parallel PATCHes apply only once, and each way an update fails |
 | [Delete a tenant](delete-tenant.md) | Delete a tenant, see it succeed, and see each way it can fail |
+| [Running the tests](testing.md) | How to run all or part of the tests, read the results, and the other checks (lint, vulnerabilities, race test) |
 | [Error messages](errors.md) | Every error code and message, and exactly when each is returned |
 
 Every command output in these guides was captured from a real run. Your ids

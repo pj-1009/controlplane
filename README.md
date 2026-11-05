@@ -46,6 +46,7 @@ Step-by-step guides are in [`docs/`](docs/README.md):
 - [Create a tenant and see it fail](docs/create-tenant-errors.md)
 - [Update a tenant](docs/update-tenant.md)
 - [Delete a tenant](docs/delete-tenant.md)
+- [Running the tests](docs/testing.md)
 - [Error messages](docs/errors.md)
 
 ### Make targets
@@ -566,6 +567,9 @@ The PATCH losers report either `tenant_update_not_allowed` or
 status or its new version first. Either way they change nothing.
 
 ## Tests
+
+Step-by-step instructions, including running a single test, are in
+[docs/testing.md](docs/testing.md).
 
 `make test` runs `go test -race` over every package against the real Postgres
 and RabbitMQ from compose. The verbose output (every test by name, with
