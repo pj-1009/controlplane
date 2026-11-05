@@ -71,6 +71,7 @@ services:
       WORKER_MAX_DELAY_MS: ${WORKER_MAX_DELAY_MS:-2000}
       WORKER_DUPLICATE_RATE: ${WORKER_DUPLICATE_RATE:-0.0}
       WORKER_SKIP_IN_PROGRESS: ${WORKER_SKIP_IN_PROGRESS:-false}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
     depends_on:
       rabbitmq:
         condition: service_healthy

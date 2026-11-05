@@ -492,6 +492,20 @@ For each task, the worker:
 If it's interrupted, the task is requeued, and the re-run produces the same
 message ids.
 
+**Running tasks in parallel.** Each task runs in its own goroutine, and
+`-concurrency` sets how many run at once. It is passed to RabbitMQ as the
+prefetch count, so the broker never hands one worker more than that many
+unacked tasks. There are two ways to raise throughput:
+
+```bash
+WORKER_CONCURRENCY=16 make worker-normal   # one worker, 16 tasks at a time
+docker compose up -d --scale worker=3      # three workers, 4 tasks each
+```
+
+Both are safe: two runs of the same task publish the same message ids, so the
+control plane applies each update once. `WORKER_CONCURRENCY` can also be set
+in `.env`.
+
 ## Negative scenarios
 
 Run these against a stack started with `make up`.
