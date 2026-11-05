@@ -1,7 +1,6 @@
 # Running the tests
 
-How to run the tests, read the results, and run just the part you care about.
-Every output below is from a real run.
+How to run the tests, read the results, and run just the part you need.
 
 ## The short version
 
@@ -80,7 +79,7 @@ grep -E '^(ok|FAIL)' test-results/<file>.txt          # one line per package
 ### When a test fails
 
 The output shows the test name, the file and line, what was expected and what
-came back. For example (an illustration of the format, not from a real run):
+came back. For example (illustrative):
 
 ```
 --- FAIL: TestPatchTenant (0.05s)

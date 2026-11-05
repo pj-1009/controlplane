@@ -1,8 +1,7 @@
 # Create a tenant and see it fail
 
-Commands that make tenant creation fail, and the exact error each one returns.
-Every output below is from a real run. [Error messages](errors.md) lists every
-error code in one table.
+Commands that make tenant creation fail, and the error each one returns.
+[Error messages](errors.md) lists every error code in one table.
 
 There are two kinds of failure:
 

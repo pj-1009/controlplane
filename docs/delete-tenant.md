@@ -1,7 +1,6 @@
 # Delete a tenant
 
-The commands to delete a tenant, see it succeed, and see each way it can fail.
-Every output below is from a real run.
+Deleting a tenant, and each way a delete can fail.
 
 ## How delete works
 

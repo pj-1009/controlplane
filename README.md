@@ -1,84 +1,52 @@
 # Tenant Provisioning Control Plane
 
-A small multi-tenant SaaS control plane in Go. Creating, updating or deleting a
-tenant records a **task** and emits an event. A separate **worker simulator**
-consumes tasks, fakes slow provisioning and reports progress back over
-RabbitMQ. The control plane consumes those updates and advances task and
-tenant state.
+A small multi-tenant control plane in Go. Creating, updating or deleting a
+tenant records a **task** and emits an event. A separate **worker** consumes
+tasks, simulates slow provisioning and reports progress back over RabbitMQ; the
+control plane applies those updates to task and tenant state.
 
-- **Go 1.26**, standard library first: `net/http` + chi, `log/slog`, `embed`
-- **PostgreSQL 16** through pgx (plain SQL, no ORM)
-- **RabbitMQ 3.13** through amqp091-go
-- Everything runs in Docker. The host needs only Docker and make.
+Go 1.26 (`net/http` + chi, `log/slog`), PostgreSQL 16 via pgx (plain SQL),
+RabbitMQ 3.13 via amqp091-go. Everything runs in Docker; the host needs only
+Docker and make.
 
-## Quick start
+## Setup
 
 ```bash
-git clone <repo> && cd <repo>
-make up      # build and boot postgres, rabbitmq, control plane and worker; waits for /healthz
-make test    # run the full test suite (-race) in a golang container against the stack
+git clone https://github.com/pj-1009/controlplane.git && cd controlplane
+make up      # build and start postgres, rabbitmq, control plane and worker; waits for /healthz
+make test    # every test, with -race, in a golang container against real postgres + rabbitmq
 ```
 
-`make up` prints the URLs:
+- API: <http://localhost:8000> (health: `/healthz`)
+- RabbitMQ UI: <http://localhost:15672>, login from `.env`
 
-- API: <http://localhost:8000> (health: <http://localhost:8000/healthz>)
-- RabbitMQ management UI: <http://localhost:15672> (log in with `RABBITMQ_USER` / `RABBITMQ_PASSWORD` from `.env`)
-
-The first `make` run creates `.env` from `.env.example` and fills in random
-Postgres and RabbitMQ passwords. `.env` is git-ignored, so no password is ever
-committed.
-
-Create a tenant and watch it become active:
+The first `make` creates a git-ignored `.env` from `.env.example` with random
+Postgres and RabbitMQ passwords, so no secret is in the repo. Postgres keeps the password it first
+started with: if you delete `.env` or switch checkouts, run
+`make clean && make up` (this wipes the local database).
 
 ```bash
-curl -s -X POST localhost:8000/tenants -H 'Content-Type: application/json' \
-  -d '{"slug":"acme","name":"Acme Corp"}'
-# {"id":"ce95b3cd-…","slug":"acme","name":"Acme Corp","status":"provisioning","version":1,…}
-
-curl -s localhost:8000/tenants/<id>     # a few seconds later: "status":"active","version":2
-curl -s "localhost:8000/tasks?tenant_id=<id>"   # the deploy task, "status":"done"
+curl -s -X POST localhost:8000/tenants -H 'Content-Type: application/json' -d '{"slug":"acme","name":"Acme Corp"}'
+# 201 {"id":"ce95b3cd-…","slug":"acme","status":"provisioning","version":1,…}
+curl -s localhost:8000/tenants/<id>              # a few seconds later: "status":"active","version":2
+curl -s "localhost:8000/tasks?tenant_id=<id>"    # the deploy task, "status":"done"
 ```
-
-Step-by-step guides are in [`docs/`](docs/README.md):
-
-- [Setup](docs/setup.md)
-- [Create a tenant](docs/create-tenant.md)
-- [Create a tenant and see it fail](docs/create-tenant-errors.md)
-- [Update a tenant](docs/update-tenant.md)
-- [Delete a tenant](docs/delete-tenant.md)
-- [Running the tests](docs/testing.md)
-- [Error messages](docs/errors.md)
-
-### Make targets
 
 | Target | What it does |
 |---|---|
-| `make up` | `docker compose up --build -d --wait`: builds images, starts everything, waits until every healthcheck (including the control plane's `/healthz`) passes |
-| `make down` | Stop and remove containers. The Postgres volume is kept. |
-| `make clean` | Also remove volumes (database, Go caches) |
-| `make logs` | Follow all logs |
-| `make test` | `go test -race -p 1 -count=1 -v -tags integration ./...` in a `golang:1.26` container on the compose network; output is also saved to `test-results/test-<timestamp>.txt` |
-| `make check` | golangci-lint (incl. gofmt/goimports check and gosec), govulncheck, then `make test` |
-| `make fmt` | Rewrite files with gofmt + goimports (via `golangci-lint fmt`) |
-| `make worker-fail` | Recreate the worker with `WORKER_FAIL_RATE=1` (every task fails) |
-| `make worker-normal` | Recreate the worker with default settings |
-| `make race` | Run `cmd/racetest` against the running API |
+| `make up` / `down` / `logs` | `docker compose up --build -d --wait` / stop (data kept) / follow logs |
+| `make clean` | Stop and delete volumes (database, Go caches) |
+| `make test` | `go test -race -p 1 -count=1 -v -tags integration ./...`; output also saved to `test-results/` |
+| `make check` | golangci-lint (formatting, vet, gosec, …), govulncheck, then `make test` |
+| `make fmt` | Fix formatting (gofmt, goimports) |
+| `make worker-fail` / `worker-normal` | Restart the worker failing every task / with defaults |
+| `make race` | 20 concurrent same-slug creates and same-version PATCHes against the running API |
 | `make publish ARGS="…"` | Publish a hand-written update (see [Negative scenarios](#negative-scenarios)) |
 
-Configuration comes from environment variables, which compose reads from `.env`.
-The passwords have no default. Compose refuses to start without them, and `make`
-generates them, so no secret lives in the repo. Every other setting has a
-default in `docker-compose.yml`.
-
-**`.env` and the database volume belong together.** Postgres sets its password
-only on first boot, when the `pgdata` volume is empty, and keeps it after that.
-A different `.env` against an existing volume makes the control plane log
-`database not ready, retrying … password authentication failed` and never turn
-healthy. That happens if you delete `.env`, change a password, or run a second
-checkout of the repo (both use the compose project `controlplane`, so they
-share the volume). Fix it with `make clean && make up`, which deletes the
-volume, and the local data with it, so Postgres starts again with the current
-`.env`.
+Guides with full outputs are in [`docs/`](docs/README.md): [setup](docs/setup.md),
+[create](docs/create-tenant.md), [create errors](docs/create-tenant-errors.md),
+[update](docs/update-tenant.md), [delete](docs/delete-tenant.md),
+[tests](docs/testing.md) and [error messages](docs/errors.md).
 
 ## Architecture
 
@@ -159,141 +127,96 @@ sequenceDiagram
     API-->>C: 200 tenant (active, v2)
 ```
 
-### Layout
-
 ```
-cmd/controlplane/      API + outbox relay + update consumer, wired with errgroup
-cmd/worker/            worker simulator CLI (flags, env fallback, validation)
-cmd/racetest/          concurrent same-slug creates / same-version PATCHes
-internal/domain/       types, timestamps, sentinel errors, message schemas, state_machine.go (pure)
-internal/store/        all SQL: tenants, tasks, outbox, processed_messages, pagination
-internal/api/          chi router, handlers, validation, error mapping
-internal/outbox/       relay loop
-internal/consumer/     inbound update consumer
-internal/broker/       reconnecting AMQP connection, topology, publish with confirms, consume loop
-internal/worker/       worker simulator logic (separate from main so tests can run it)
-internal/retry/        exponential backoff with jitter
-internal/config/       env config and logger
-internal/testutil/     test database/queue isolation helpers
-internal/e2e/          end-to-end tests: API + relay + consumer + worker in-process
-migrations/            numbered .sql files, embedded and applied at startup
-scripts/               publish_update.sh
+cmd/controlplane/    API + outbox relay + update consumer, wired with errgroup
+cmd/worker/          worker CLI: flags, env fallback, validation
+cmd/racetest/        the `make race` load test
+internal/domain/     types, errors, message schemas, state machine (pure functions)
+internal/store/      all SQL: tenants, tasks, outbox, processed_messages, pagination
+internal/api/        router, handlers, validation, error mapping
+internal/outbox/     relay loop
+internal/consumer/   update consumer
+internal/broker/     reconnecting AMQP connection, topology, publish with confirms, consume loop
+internal/worker/     worker logic, separate from main so end-to-end tests can run it
+internal/retry/      backoff with jitter, shared by reconnects and consumer retries
+internal/config/     env config and logger
+internal/testutil/   test database and queue isolation
+internal/e2e/        end-to-end tests, everything in one process
+migrations/          numbered .sql files, embedded and applied at startup (runner lives here to avoid an import cycle in tests)
+scripts/             publish_update.sh
 ```
 
-Where this differs from the suggested layout, and why:
-- `internal/worker` holds the simulator logic so end-to-end tests can run it in-process.
-- `internal/retry` shares one backoff between broker reconnects and consumer retries.
-- `internal/testutil` keeps test isolation in one place.
-- The migration runner lives in `migrations/` next to its embedded files. That lets the store's own tests import the test helpers without an import cycle.
+## Design decisions
 
-## Design decisions and trade-offs
+**Outbox, not publish-after-commit.** The tenant, its task and an `outbox` row
+are written in one transaction, and the HTTP handler never talks to RabbitMQ.
+Publishing after `COMMIT` loses the task if we crash in between; publishing
+before it announces tasks that may roll back. The cost is up to 500ms of delay
+(the relay polls) and one extra table.
 
-**Transactional outbox instead of publishing after commit.** The tenant row,
-the task row and an `outbox` row are written in **one** transaction. The HTTP
-handler never talks to RabbitMQ. If we published right after `COMMIT`, a crash
-or broker outage between the two would leave a task nobody ever hears about.
-If we published before `COMMIT`, a rollback would leave a message about a task
-that doesn't exist. With the outbox, "the change happened" and "an event will
-be sent" are the same database fact. The cost is a short delay (the relay
-polls every 500ms) and an extra table.
+**At-least-once delivery plus idempotency.** The relay publishes, waits for
+publisher confirms, then marks rows sent. A crash between the two resends the
+row, which is safe; marking first could lose it. The consumer records each
+update's `message_id` in `processed_messages` in the same transaction as the
+state change, so a redelivery is either a recorded duplicate (ack, no change)
+or nothing of it was committed.
 
-**At-least-once delivery plus idempotency, not exactly-once.** The relay
-publishes a batch, waits for **publisher confirms**, then marks the rows sent
-and commits. A crash after the confirm but before the commit means the row is
-published again. Marking rows sent *before* publishing would risk losing
-messages instead, which is worse. Duplicates are cheap to absorb:
-- Task messages carry `MessageId = task id`.
-- The worker derives its update ids from the task id.
-- The consumer records every update `message_id` in `processed_messages`, in
-  the same transaction as the state change.
-  A redelivered update either hits the unique key (duplicate → ack, no change)
-  or none of its effects were committed.
-
-**Deterministic `message_id = "<task_id>:<status>"`.** If the worker crashes
-and the task is redelivered, the re-run produces the *same* ids, so the
-control plane drops what it already applied. A random id per publish would
+**Deterministic `message_id = "<task_id>:<status>"`.** A redelivered task
+produces the same update ids on re-run, so dedup catches them. Random ids would
 defeat the dedup table.
 
-**Status ranks and forward skips.** Task statuses have ranks: `accepted`=0,
-`in_progress`=1, `done`/`failed`=2. An update applies only if it moves to a
-strictly higher rank. The SQL is
-`UPDATE … WHERE status = ANY(<statuses ranked lower>)`. This lets
-`accepted → done` work if `in_progress` is lost or arrives late, and a late
-`in_progress` then matches nothing and is logged as **stale**. Stale is not
-an error: the message is acked and its id stays recorded. Terminal statuses
-can never change.
+**Status ranks with forward skips.** `accepted`=0, `in_progress`=1,
+`done`/`failed`=2. An update applies only if it raises the rank
+(`UPDATE … WHERE status = ANY(<lower ranks>)`). So `accepted → done` works if
+`in_progress` is lost, a late `in_progress` is acked as **stale**, and terminal
+statuses never change.
 
-**Optimistic locking in SQL, not check-then-act.** PATCH is one statement:
-`UPDATE tenants SET …, version = version + 1 WHERE id = $1 AND version = $2
-AND status = ANY($3) RETURNING …`. Only one of N concurrent PATCHes with the
-same version can match. If no row matched, a follow-up read picks the error,
-checking status first because a retry can't fix a wrong status:
-`tenant_not_found`, then `tenant_update_not_allowed`, then
-`tenant_version_conflict`. Worker-applied status changes bump `version` too,
-so a client holding a pre-change version can't overwrite them.
+**Optimistic locking in one SQL statement.** PATCH runs
+`UPDATE tenants SET status = 'updating', version = version + 1 WHERE id = $1 AND version = $3 AND status = ANY($4)`,
+so only one of N concurrent PATCHes with the same version matches. When none
+match, a re-read picks the error: `tenant_not_found`, then
+`tenant_update_not_allowed`, then `tenant_version_conflict`. Worker changes bump
+the version too. The new name rides on the update task (`requested_name`) and
+is applied only when that task is `done`, so a failed update keeps the old name.
 
-**DB unique constraint for slugs.** Create is a plain `INSERT`. A
-`23505 unique_violation` on `tenants_slug_key` becomes `tenant_already_exists`.
-A "SELECT first" check would race. The tests fire 20 concurrent creates and
-get exactly one 201.
+**Database unique constraint for slugs.** Create is a plain `INSERT`; a
+`23505` on `tenants_slug_key` becomes `tenant_already_exists`. Checking with a
+`SELECT` first would race.
 
-**Soft delete.** `DELETE` moves a tenant to `destroying` and then
-`destroyed`. Rows are never removed, so a slug stays unique across all
-tenants ever created, and the task history keeps its foreign keys. A partial
-unique index `tasks(tenant_id) WHERE status IN ('accepted','in_progress')`
-backs up the rule "at most one open task per tenant", which the status guards
-already enforce.
+**Soft delete.** DELETE moves a tenant to `destroying`, then `destroyed`; rows
+are never removed, so slugs stay unique forever and task history keeps its
+foreign keys. A partial unique index allows at most one open task per tenant,
+as a safety net under the status rules.
 
-**DLQ instead of dropping or retrying forever.** Updates that can never
-succeed are `Nack(requeue=false)`ed. RabbitMQ routes them through
-`task_updates.dlx` into the durable `task_updates.dlq`, where you can inspect
-or replay them. These cases are:
-- invalid JSON, unknown fields, wrong `schema_version` or unknown status
-- an unknown task id
-- a tenant in an unexpected state
-- a panic in the handler
+**DLQ, not drop or retry forever.** Updates that can never succeed (bad JSON,
+unknown fields or schema version, unknown task, impossible transition, a
+handler panic) are `Nack(requeue=false)`ed into `task_updates.dlq` through
+`task_updates.dlx`. Transient errors such as the database being down are
+`Nack(requeue=true)`ed after exponential backoff with jitter, capped at 30s.
 
-Requeuing such a message would loop forever, and dropping it would hide the
-bug. Transient failures, such as the database being down, are retried
-instead: `Nack(requeue=true)` after exponential backoff with jitter, capped at
-30s.
+**Plain SQL with pgx, no ORM.** The guarantees here (conditional updates,
+`SKIP LOCKED`, `ON CONFLICT DO NOTHING`, partial indexes, keyset pagination)
+are SQL features, and keeping them as SQL in `internal/store` keeps them visible.
 
-**Plain SQL with pgx instead of an ORM.** Every important guarantee here
-(conditional updates, `SKIP LOCKED`, `ON CONFLICT DO NOTHING`, partial unique
-indexes, keyset pagination) is a SQL feature. Writing the SQL directly keeps
-those guarantees visible and reviewable in one package (`internal/store`).
+**chi, not the stdlib mux.** A thin `net/http`-compatible router with route
+groups, URL params and JSON 404/405 handlers; handlers stay plain
+`http.HandlerFunc`s.
 
-**chi instead of the stdlib mux.** chi is a thin, `net/http`-compatible
-router. It gives route groups, URL params, and JSON 404/405 handlers without
-extra wrapping. The handlers stay ordinary `http.HandlerFunc`s.
+**Hand-rolled AMQP reconnect.** amqp091-go doesn't reconnect. `broker.Conn.Run`
+watches `NotifyClose`, redials with backoff and redeclares the (idempotent)
+topology; publishers and consumers take a fresh channel when theirs closes. A
+test cuts the connection through the management API and checks both resume.
 
-**Hand-rolled AMQP reconnect.** amqp091-go doesn't reconnect by itself.
-`broker.Conn.Run` watches `NotifyClose`, redials with backoff and redeclares
-the topology on every connect. Publishers and consumers ask it for a fresh
-channel whenever theirs closes. Topology declaration is idempotent, so both
-processes run it on every connect. A test force-closes the connection
-through the management API and checks that publishing and consuming resume.
+**One process for API, relay and consumer.** Simpler to run: one pool, one
+broker connection, one context. SIGINT/SIGTERM or any failing part cancels it,
+HTTP drains, relay and consumer stop. They can be split later; the relay's
+`SKIP LOCKED` already allows several instances.
 
-**One process for API, relay and consumer.** It's simpler to run and reason
-about. All three share one pool, one broker connection and one context: a
-SIGINT/SIGTERM or a failing component cancels it, the HTTP server drains, and
-the relay and consumer stop. In-flight updates finish under their own short
-timeout. They scale independently later if needed (see limitations). The
-relay already uses `SKIP LOCKED`, so several instances wouldn't send the same
-row at once.
-
-**Go 1.26 rather than 1.23.** The original brief pinned Go 1.23. That
-release is end-of-life, and `govulncheck` reports dozens of reachable
-standard-library vulnerabilities in it (crypto/tls, crypto/x509, net/http, …)
-that will never be fixed on that line. Some are only fixed in Go 1.26.x, so
-this project uses Go 1.26 with current chi, pgx, amqp091-go and x/text, and
-`make check` reports no vulnerabilities. The only code change it needed was
-fixing the healthcheck probe to loopback, which the newer gosec asked for.
-
-**Pagination.** The cursor is an opaque base64 encoding of
-`(created_at, id)` at full timestamp precision. Lists are ordered by that
-pair ascending, and the next page uses `(created_at, id) > (cursor)`. The
-default limit is 20 and the maximum is 100.
+**Also:** Go 1.26 instead of the brief's 1.23, because 1.23 is end-of-life and
+govulncheck reports standard-library vulnerabilities fixed only in newer
+releases. Pagination is keyset-based: an opaque base64 cursor of
+`(created_at, id)`, next page `WHERE (created_at, id) > cursor`, default limit
+20, max 100.
 
 ## State machines
 
@@ -308,18 +231,13 @@ Tenant:  POST ──► provisioning ──deploy done──► active ──PAT
                                                   └──destroy failed──► failed
 ```
 
-The rules live in `internal/domain/state_machine.go` as pure functions,
-shared by the store (SQL guards) and the consumer.
-
-A rename follows the same rule as every other change: it takes effect only
-when its task succeeds. PATCH stores the requested name on the update task,
-and the consumer copies it to the tenant in the same transaction that marks
-the task `done`. A failed update never leaves a half-applied rename.
+The rules are pure functions in `internal/domain/state_machine.go`, used by the
+store's SQL guards and by the consumer.
 
 ## API reference
 
-All responses are JSON. Timestamps are ISO 8601 UTC with milliseconds, e.g.
-`2026-11-03T10:15:02.123Z`. Errors always look like this:
+JSON everywhere; timestamps are UTC with milliseconds (`2026-11-03T10:15:02.123Z`).
+Every error has the same shape:
 
 ```json
 {"error": {"code": "tenant_not_found", "message": "tenant not found", "details": {}}}
@@ -327,107 +245,68 @@ All responses are JSON. Timestamps are ISO 8601 UTC with milliseconds, e.g.
 
 | Code | HTTP | When |
 |---|---|---|
-| `validation_error` | 422 | malformed JSON, unknown fields, bad slug, empty name, missing/invalid version, bad query params. `details` names the fields |
-| `tenant_not_found` | 404 | unknown tenant id. **Invalid UUIDs in the path also get 404**, because they can't match any row. |
-| `task_not_found` | 404 | unknown or invalid task id |
-| `tenant_already_exists` | 409 | slug taken, including by a destroyed tenant |
-| `tenant_update_not_allowed` | 409 | PATCH when not `active`; DELETE when not `active`/`failed` |
+| `validation_error` | 422 | Bad JSON, unknown field, bad slug, blank name, missing or invalid version, bad query parameter; `details` names the field |
+| `tenant_not_found` / `task_not_found` | 404 | Unknown id; **an id that isn't a UUID also gets 404** |
+| `tenant_already_exists` | 409 | Slug taken, including by a destroyed tenant |
+| `tenant_update_not_allowed` | 409 | PATCH when not `active`; DELETE when not `active` or `failed` |
 | `tenant_version_conflict` | 409 | PATCH with a stale `version` |
-| `route_not_found` / `method_not_allowed` | 404 / 405 | unknown route or method |
-| `internal_error` | 500 | unexpected failure. The cause is logged, never returned. |
-| `service_unavailable` | 503 | `/healthz` when a dependency is down |
+| `route_not_found` / `method_not_allowed` | 404 / 405 | Unknown route or method |
+| `internal_error` | 500 | Unexpected failure; the cause is logged, never returned |
+| `service_unavailable` | 503 | `/healthz` when the database or broker is down |
 
-### `POST /tenants`
+Every message text is listed in [docs/errors.md](docs/errors.md).
+
+**`POST /tenants`**: `slug` matches `^[a-z][-a-z0-9]{1,26}[a-z0-9]$` (3–28
+characters); `name` is trimmed and must not be blank.
 
 ```bash
-curl -i -X POST localhost:8000/tenants -H 'Content-Type: application/json' \
-  -d '{"slug":"acme","name":"Acme Corp"}'
-# 201 Created, Location: /tenants/<id>
-# {"id":"…","slug":"acme","name":"Acme Corp","status":"provisioning","version":1,"created_at":"…","updated_at":"…"}
+curl -i -X POST localhost:8000/tenants -d '{"slug":"acme","name":"Acme Corp"}'   # 201, Location: /tenants/<id>
+curl -s -X POST localhost:8000/tenants -d '{"slug":"acme","name":"Again"}'       # 409 tenant_already_exists
+curl -s -X POST localhost:8000/tenants -d '{"slug":"Bad_Slug","name":"x"}'       # 422 details.slug
+curl -s -X POST localhost:8000/tenants -d '{"slug":"acme2","name":"   "}'        # 422 details.name
+curl -s -X POST localhost:8000/tenants -d '{"slug":"acme2","name":"x","plan":"gold"}'   # 422 details.body (unknown field)
+curl -s -X POST localhost:8000/tenants -d '{"slug":'                             # 422 details.body (bad JSON)
 ```
 
-- `slug` must be 3-28 characters and match `^[a-z][-a-z0-9]{1,26}[a-z0-9]$`.
-- `name` is trimmed and must not be empty.
-
-Errors:
+**`GET /tenants`**: `status`, `limit` (1–100, default 20), `cursor`.
 
 ```bash
-# 409 tenant_already_exists
-curl -s -X POST localhost:8000/tenants -d '{"slug":"acme","name":"Again"}'
-# 422 validation_error, details.slug
-curl -s -X POST localhost:8000/tenants -d '{"slug":"Bad_Slug","name":"x"}'
-# 422 validation_error, details.name
-curl -s -X POST localhost:8000/tenants -d '{"slug":"acme2","name":"   "}'
-# 422 validation_error, details.body (unknown field)
-curl -s -X POST localhost:8000/tenants -d '{"slug":"acme2","name":"x","plan":"gold"}'
-# 422 validation_error, details.body (malformed JSON)
-curl -s -X POST localhost:8000/tenants -d '{"slug":'
+curl -s "localhost:8000/tenants?status=active&limit=2"   # {"items":[…],"next_cursor":"eyJj…"}, null on the last page
+curl -s "localhost:8000/tenants?limit=2&cursor=eyJj…"    # next page
+curl -s "localhost:8000/tenants?status=bogus"            # 422 (also limit=0, limit=101, cursor=garbage)
 ```
 
-### `GET /tenants`
-
-Query parameters: `status`, `limit` (1-100, default 20) and `cursor`.
+**`GET /tenants/{id}`**
 
 ```bash
-curl -s "localhost:8000/tenants?status=active&limit=2"
-# {"items":[…],"next_cursor":"eyJj…"}      next_cursor is null on the last page
-curl -s "localhost:8000/tenants?limit=2&cursor=eyJj…"
-# 422 validation_error: status=bogus, limit=0, limit=101, cursor=garbage
-curl -s "localhost:8000/tenants?status=bogus"
+curl -s localhost:8000/tenants/<id>                                     # 200
+curl -s localhost:8000/tenants/00000000-0000-0000-0000-000000000000     # 404 tenant_not_found
+curl -s localhost:8000/tenants/not-a-uuid                               # 404 tenant_not_found
 ```
 
-### `GET /tenants/{id}`
+**`PATCH /tenants/{id}`**: only when `active`. The tenant goes to `updating`
+and keeps its current name until the update task is `done`.
 
 ```bash
-curl -s localhost:8000/tenants/<id>                  # 200 tenant
-curl -s localhost:8000/tenants/00000000-0000-0000-0000-000000000000   # 404 tenant_not_found
-curl -s localhost:8000/tenants/not-a-uuid            # 404 tenant_not_found
+curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"Acme Inc","version":2}'   # 202, "status":"updating","version":3
+curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"x","version":1}'          # 409 tenant_version_conflict
+curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"x","version":3}'          # 409 tenant_update_not_allowed (not active)
+curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"x"}'                      # 422 (also blank name, unknown field)
+curl -s -X PATCH localhost:8000/tenants/00000000-0000-0000-0000-000000000000 -d '{"name":"x","version":1}'   # 404
 ```
 
-### `PATCH /tenants/{id}`
-
-Only allowed while the tenant is `active`. It moves the tenant to `updating`
-and creates an `update` task that carries the new name as `requested_name`.
-The tenant keeps its current name until that task is `done`; if the task
-`failed`, the tenant becomes `failed` with its old name. See
-[docs/update-tenant.md](docs/update-tenant.md) for full outputs.
+**`DELETE /tenants/{id}`**: only from `active` or `failed`; goes to
+`destroying`, then `destroyed`. The row is kept.
 
 ```bash
-curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"Acme Inc","version":2}'
-# 202 {"…","name":"Acme Corp","status":"updating","version":3}    old name until the update is done
-curl -s localhost:8000/tenants/<id>
-# a few seconds later: {"…","name":"Acme Inc","status":"active","version":4}
-```
-
-Errors:
-
-```bash
-# 409 tenant_version_conflict (version is stale)
-curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"x","version":1}'
-# 409 tenant_update_not_allowed (tenant is provisioning/updating/destroying/destroyed/failed)
-curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"x","version":3}'
-# 422 validation_error (missing version / missing or blank name / unknown field)
-curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"x"}'
-# 404 tenant_not_found
-curl -s -X PATCH localhost:8000/tenants/00000000-0000-0000-0000-000000000000 -d '{"name":"x","version":1}'
-```
-
-### `DELETE /tenants/{id}`
-
-Only allowed from `active` or `failed`. It moves the tenant to `destroying`,
-then `destroyed` once the worker reports done. The row is never removed.
-
-```bash
-curl -s -X DELETE localhost:8000/tenants/<id>   # 202 {"…","status":"destroying"}
-curl -s -X DELETE localhost:8000/tenants/<id>   # 409 tenant_update_not_allowed (already destroying)
+curl -s -X DELETE localhost:8000/tenants/<id>    # 202, "status":"destroying"
+curl -s -X DELETE localhost:8000/tenants/<id>    # 409 tenant_update_not_allowed (already destroying)
 curl -s -X DELETE localhost:8000/tenants/00000000-0000-0000-0000-000000000000   # 404 tenant_not_found
 ```
 
-### `GET /tasks`
-
-Query parameters: `tenant_id`, `status` (accepted|in_progress|done|failed),
-`type` (deploy|update|destroy), `limit` and `cursor`. `requested_name` is the
-new name an `update` task applies when it is done, and `null` for other types.
+**`GET /tasks`**: `tenant_id`, `status` (accepted, in_progress, done, failed),
+`type` (deploy, update, destroy), `limit`, `cursor`. `requested_name` is set on
+update tasks only.
 
 ```bash
 curl -s "localhost:8000/tasks?tenant_id=<id>"
@@ -436,224 +315,92 @@ curl -s "localhost:8000/tasks?type=destroy&status=failed"
 curl -s "localhost:8000/tasks?tenant_id=nope"    # 422 validation_error
 ```
 
-### `GET /tasks/{id}`
+**`GET /tasks/{id}`** and **`GET /healthz`**
 
 ```bash
-curl -s localhost:8000/tasks/<task_id>           # 200 task
-curl -s localhost:8000/tasks/not-a-uuid          # 404 task_not_found
-```
-
-### `GET /healthz`
-
-```bash
-curl -s localhost:8000/healthz
-# 200 {"status":"ok","checks":{"database":"ok","broker":"ok"}}
+curl -s localhost:8000/tasks/<task_id>     # 200
+curl -s localhost:8000/tasks/not-a-uuid    # 404 task_not_found
+curl -s localhost:8000/healthz             # 200 {"status":"ok","checks":{"database":"ok","broker":"ok"}}
 # 503 {"error":{"code":"service_unavailable",…,"details":{"broker":"broker not connected","database":"ok"}}}
 ```
 
-## Messages
-
-Task message, sent to the `tasks` queue (persistent, `MessageId` = task id):
-
-```json
-{"event_id":"<task id>","task_id":"<task id>","type":"deploy","tenant_id":"…",
- "status":"accepted","created_at":"2026-11-03T10:15:02.123Z","schema_version":1}
-```
-
-Update message, sent by the worker to the `task_updates` queue:
+**Messages.** Task messages go to `tasks` (persistent, `MessageId` = task id);
+updates come back on `task_updates`:
 
 ```json
-{"message_id":"<task id>:done","task_id":"…","status":"done","error":null,
- "occurred_at":"2026-11-03T10:15:04.456Z","schema_version":1}
+{"event_id":"<task id>","task_id":"<task id>","type":"deploy","tenant_id":"…","status":"accepted","created_at":"2026-11-03T10:15:02.123Z","schema_version":1}
+{"message_id":"<task id>:done","task_id":"…","status":"done","error":null,"occurred_at":"2026-11-03T10:15:04.456Z","schema_version":1}
 ```
 
-## Worker simulator
+## Worker
 
-Every flag can also be set with an environment variable. A flag on the
-command line wins. Invalid values make the worker exit with code 2 and a
-clear message.
+For each task the worker sleeps, publishes `in_progress`, sleeps, publishes
+`done` (or `failed` with an error), waits for publisher confirms, then acks.
+If interrupted, the task is requeued and the re-run sends the same message ids.
 
 | Flag | Env | Default |
 |---|---|---|
-| `-fail-rate` (0-1) | `WORKER_FAIL_RATE` | 0 |
-| `-min-delay-ms` | `WORKER_MIN_DELAY_MS` | 500 |
-| `-max-delay-ms` | `WORKER_MAX_DELAY_MS` | 2000 |
-| `-duplicate-rate` (0-1) | `WORKER_DUPLICATE_RATE` | 0 |
+| `-fail-rate` (0–1) | `WORKER_FAIL_RATE` | 0 |
+| `-min-delay-ms` / `-max-delay-ms` | `WORKER_MIN_DELAY_MS` / `WORKER_MAX_DELAY_MS` | 500 / 2000 |
+| `-duplicate-rate` (0–1) | `WORKER_DUPLICATE_RATE` | 0 |
 | `-skip-in-progress` | `WORKER_SKIP_IN_PROGRESS` | false |
 | `-concurrency` | `WORKER_CONCURRENCY` | 4 |
 
-For each task, the worker:
-1. sleeps,
-2. publishes `in_progress`,
-3. sleeps,
-4. publishes `done`, or `failed` with an error string,
-5. waits for publisher confirms, then acks the task.
-
-If it's interrupted, the task is requeued, and the re-run produces the same
-message ids.
-
-**Running tasks in parallel.** Each task runs in its own goroutine, and
-`-concurrency` sets how many run at once. It is passed to RabbitMQ as the
-prefetch count, so the broker never hands one worker more than that many
-unacked tasks. There are two ways to raise throughput:
-
-```bash
-WORKER_CONCURRENCY=16 make worker-normal   # one worker, 16 tasks at a time
-docker compose up -d --scale worker=3      # three workers, 4 tasks each
-```
-
-Both are safe: two runs of the same task publish the same message ids, so the
-control plane applies each update once. `WORKER_CONCURRENCY` can also be set
-in `.env`.
+A flag beats its env var; invalid values exit with code 2. Each task runs in
+its own goroutine, and `-concurrency` is the RabbitMQ prefetch, so a worker
+never holds more than that many unacked tasks. To scale:
+`WORKER_CONCURRENCY=16 make worker-normal`, or `docker compose up -d --scale worker=3`.
 
 ## Negative scenarios
 
-Run these against a stack started with `make up`.
-
-**Worker failures**, ending in a failed tenant that can then be destroyed:
+Against a running `make up`:
 
 ```bash
+# Worker failure: the tenant ends failed, then can be destroyed
 make worker-fail
 curl -s -X POST localhost:8000/tenants -d '{"slug":"doomed","name":"Doomed"}'
-curl -s localhost:8000/tenants/<id>                    # "status":"failed"
-curl -s "localhost:8000/tasks?tenant_id=<id>"          # "error":"simulated deploy failure"
+curl -s localhost:8000/tenants/<id>                 # "status":"failed"
+curl -s "localhost:8000/tasks?tenant_id=<id>"       # "error":"simulated deploy failure"
 make worker-normal
-curl -s -X DELETE localhost:8000/tenants/<id>          # destroying
-curl -s localhost:8000/tenants/<id>                    # shortly: destroyed
-```
+curl -s -X DELETE localhost:8000/tenants/<id>       # destroying, shortly destroyed
 
-**Duplicate updates.** The same `done` message is sent twice. The logs show
-`duplicate update ignored`, and the tenant version doesn't change:
-
-```bash
+# Duplicates: the same "done" twice; logs show "duplicate update ignored", version unchanged
 make publish ARGS="duplicate <task_id>"
-make logs   # or: docker compose logs controlplane | grep duplicate
-```
+WORKER_DUPLICATE_RATE=1 docker compose up -d --no-deps --force-recreate worker   # worker doubles every update
 
-You can also make the worker itself send every update twice:
-
-```bash
-WORKER_DUPLICATE_RATE=1 docker compose up -d --no-deps --force-recreate worker
-```
-
-**Out-of-order updates.** A late `in_progress` arrives after `done`. It uses
-a fresh message_id, so it gets past dedup and reaches the rank check. The
-logs show `stale update ignored`:
-
-```bash
+# Out of order: a late in_progress with a fresh id gets past dedup; logs show "stale update ignored"
 make publish ARGS="stale <task_id>"
-```
+WORKER_SKIP_IN_PROGRESS=true docker compose up -d --no-deps --force-recreate worker   # forward skip accepted -> done
 
-To exercise the forward skip (`accepted → done`), run the worker without
-`in_progress` updates:
+# Poison: dead-lettered while the consumer keeps going
+make publish ARGS=poison            # invalid JSON
+make publish ARGS=unknown-task      # valid shape, unknown task
+docker compose exec rabbitmq rabbitmqctl list_queues name messages   # task_updates.dlq 2
 
-```bash
-WORKER_SKIP_IN_PROGRESS=true docker compose up -d --no-deps --force-recreate worker
-```
-
-**Poison messages.** These are dead-lettered, and the consumer keeps going:
-
-```bash
-make publish ARGS=poison           # invalid JSON
-make publish ARGS=unknown-task     # well-formed, but the task doesn't exist
-docker compose exec rabbitmq rabbitmqctl list_queues name messages
-# task_updates.dlq   2
-```
-
-You can also inspect `task_updates.dlq` in the management UI
-(<http://localhost:15672>, Queues tab, then Get messages).
-
-**Concurrency race**:
-
-```bash
+# Races: exactly one winner each
 make race
-# Race 1: 20 concurrent POST /tenants with slug "race-…"
-#   201                                      x1
-#   409 tenant_already_exists                x19
-# Race 2: 20 concurrent PATCH /tenants/… with version 2
-#   202                                      x1
-#   409 tenant_update_not_allowed            x19
-# OK: exactly one winner in each race.
+# Race 1: 20 concurrent POST /tenants  -> 201 x1, 409 tenant_already_exists x19
+# Race 2: 20 concurrent PATCH, same version -> 202 x1, 409 x19
 ```
 
-The PATCH losers report either `tenant_update_not_allowed` or
+PATCH losers in the race see `tenant_update_not_allowed` or
 `tenant_version_conflict`, depending on whether they see the winner's new
-status or its new version first. Either way they change nothing.
+status or new version first; either way they change nothing.
 
 ## Tests
 
-Step-by-step instructions, including running a single test, are in
+`make test` runs unit, integration and end-to-end tests with `-race` against
+real Postgres and RabbitMQ. Integration tests use a separate `controlplane_test`
+database and random queue names, so they never touch the running stack.
+Coverage by package, running a single test, and reading results are in
 [docs/testing.md](docs/testing.md).
 
-`make test` runs `go test -race` over every package against the real Postgres
-and RabbitMQ from compose. The verbose output (every test by name, with
-`PASS`/`FAIL`) is printed and also saved to `test-results/test-<timestamp>.txt`,
-one file per run. That folder is git-ignored.
+## Known limitations
 
-- **Unit tests**:
-  - table-driven tests for every allowed and forbidden task and tenant transition
-  - slug, name and timestamp validation, and strict message decoding
-  - worker flag parsing and validation
-  - backoff
-  - the panic recoverer and error mapping
-- **Store**:
-  - migrations are idempotent
-  - a rolled-back transaction leaves no outbox row; a committed one leaves exactly one
-  - optimistic locking errors
-  - pagination
-  - the relay stops at the first publish error
-- **API**:
-  - every endpoint and every error code, plus validation and pagination, tested with `httptest` against the real router and database
-  - 20 concurrent same-slug creates give exactly one 201
-  - 20 concurrent same-version PATCHes give exactly one 202
-  - a PATCH racing a worker status change loses
-- **Broker and outbox**:
-  - persistent messages with confirms
-  - idempotent topology
-  - reconnect after a server-side connection close
-  - the relay publishes and marks rows sent
-  - a resend after a simulated crash before marking sent
-- **Consumer**:
-  - duplicate updates change nothing
-  - a late `in_progress` after `done` is ignored
-  - updates for terminal tasks are ignored
-  - the `accepted → done` skip works
-  - poison messages and handler panics land in the DLQ while the next message still applies
-  - transient errors are retried
-  - tenant version bumps on worker-applied changes
-- **End to end** (API, relay, consumer and worker in-process):
-  - create → active
-  - fail-rate=1 → failed, then DELETE → destroying → destroyed
-  - duplicate-rate=1 with skip-in-progress converges
-  - a relay resend is harmless
-
-Isolation: integration tests use a separate `controlplane_test` database,
-truncated per test, and per-test queue names (`test-<random>.tasks`, …). They
-never touch the running stack's data or compete with its consumers, and they
-can run repeatedly. Packages share the test database, so they run with `-p 1`.
-Integration tests carry the `integration` build tag, so
-`go test ./...` without the stack runs only the unit tests.
-
-## Known limitations / future work
-
-- **Outbox cleanup:** sent rows (and `processed_messages`) are kept forever.
-  They need a periodic job that deletes rows older than N days.
-- **Stuck tasks:** if the worker never reports back, the task stays open and
-  the tenant stays in `provisioning`/`updating`/`destroying`. This needs a
-  timeout sweeper that fails tasks after a deadline.
-- **Metrics/tracing:** logs are structured JSON, but there are no Prometheus
-  metrics (relay lag, DLQ depth, consumer outcomes) and no trace propagation
-  through messages.
-- **DLQ replay:** messages can be inspected in the UI, but there's no tool to
-  fix and replay them.
-- **Multi-relay scaling:** `SKIP LOCKED` keeps multiple relays from sending
-  the same row concurrently, but message order across relays isn't
-  guaranteed. Ordering doesn't matter for correctness here, because each
-  tenant has one open task at a time and updates are rank-guarded. Publishing
-  also happens while row locks are held, so a slow broker slows the relay.
-  - At higher volume, use LISTEN/NOTIFY instead of polling.
-  - Or move to logical-replication CDC.
-- **Pagination under concurrent inserts:** keyset pagination on `created_at`
-  can miss a row whose transaction committed after a later-timestamped one
-  was already paged past. This is acceptable for an admin listing.
-- **Auth, rate limiting, multi-region:** out of scope.
+- **Outbox cleanup:** sent outbox rows and `processed_messages` are kept forever; they need a periodic delete.
+- **Stuck tasks:** if the worker never answers, the tenant stays `provisioning`, `updating` or `destroying`; this needs a timeout sweeper.
+- **Metrics and tracing:** structured logs only; no Prometheus metrics (relay lag, DLQ depth) or trace propagation.
+- **DLQ replay:** messages can be inspected in the UI, but there's no tool to fix and resend them.
+- **Multi-relay scaling:** `SKIP LOCKED` prevents double sends, but order across relays isn't guaranteed (harmless here: one open task per tenant, rank-guarded updates), and publishing while holding row locks means a slow broker slows the relay. At volume, use LISTEN/NOTIFY or change data capture instead of polling.
+- **Pagination under concurrent inserts:** keyset pagination on `created_at` can skip a row that commits late; acceptable for an admin listing.
+- **Not in scope:** authentication, rate limiting, multi-region.

@@ -1,7 +1,7 @@
 # Update a tenant
 
-The commands to update (rename) a tenant, what repeated or concurrent updates
-do, and each way an update can fail. Every output below is from a real run.
+Renaming a tenant, what repeated or concurrent updates do, and each way an
+update can fail.
 
 ## How update works
 

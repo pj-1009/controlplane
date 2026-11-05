@@ -1,7 +1,6 @@
 # Create a tenant
 
-The commands to create a tenant and watch it become `active`. Every output
-below is from a real run; your ids and times will differ.
+Create a tenant and watch it become `active`.
 
 Start the stack first (see [Setup](setup.md)):
 
