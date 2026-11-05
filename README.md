@@ -37,8 +37,8 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"    # the deploy task, "status":"do
 | `make up` / `down` / `logs` | `docker compose up --build -d --wait` / stop (data kept) / follow logs |
 | `make clean` | Stop and delete volumes (database, Go caches) |
 | `make test` | `go test -race -p 1 -count=1 -v -tags integration ./...`; output also saved to `test-results/` |
-| `make check` | golangci-lint (formatting, vet, gosec, …), govulncheck, then `make test` |
-| `make fmt` | Fix formatting (gofmt, goimports) |
+| `make lint` / `fmt` / `vuln` | golangci-lint (formatting, vet, gosec, …) / fix formatting / govulncheck; each runs on demand |
+| `make check` | `lint`, `vuln`, then `test`: the CI gate |
 | `make worker-fail` / `worker-normal` | Restart the worker failing every task / with defaults |
 | `make race` | 20 concurrent same-slug creates and same-version PATCHes against the running API |
 | `make publish ARGS="…"` | Publish a hand-written update (see [Negative scenarios](#negative-scenarios)) |
@@ -46,7 +46,7 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"    # the deploy task, "status":"do
 Guides with full outputs are in [`docs/`](docs/README.md): [setup](docs/setup.md),
 [create](docs/create-tenant.md), [create errors](docs/create-tenant-errors.md),
 [update](docs/update-tenant.md), [delete](docs/delete-tenant.md),
-[tests](docs/testing.md) and [error messages](docs/errors.md).
+[tests](docs/testing.md), [CI/CD](docs/cicd.md) and [error messages](docs/errors.md).
 
 ## Architecture
 
