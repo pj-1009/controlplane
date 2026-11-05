@@ -310,6 +310,11 @@ Tenant:  POST ──► provisioning ──deploy done──► active ──PAT
 The rules live in `internal/domain/state_machine.go` as pure functions,
 shared by the store (SQL guards) and the consumer.
 
+A rename follows the same rule as every other change: it takes effect only
+when its task succeeds. PATCH stores the requested name on the update task,
+and the consumer copies it to the tenant in the same transaction that marks
+the task `done`. A failed update never leaves a half-applied rename.
+
 ## API reference
 
 All responses are JSON. Timestamps are ISO 8601 UTC with milliseconds, e.g.
@@ -381,11 +386,16 @@ curl -s localhost:8000/tenants/not-a-uuid            # 404 tenant_not_found
 ### `PATCH /tenants/{id}`
 
 Only allowed while the tenant is `active`. It moves the tenant to `updating`
-and creates an `update` task.
+and creates an `update` task that carries the new name as `requested_name`.
+The tenant keeps its current name until that task is `done`; if the task
+`failed`, the tenant becomes `failed` with its old name. See
+[docs/update-tenant.md](docs/update-tenant.md) for full outputs.
 
 ```bash
 curl -s -X PATCH localhost:8000/tenants/<id> -d '{"name":"Acme Inc","version":2}'
-# 202 {"…","name":"Acme Inc","status":"updating","version":3}
+# 202 {"…","name":"Acme Corp","status":"updating","version":3}    old name until the update is done
+curl -s localhost:8000/tenants/<id>
+# a few seconds later: {"…","name":"Acme Inc","status":"active","version":4}
 ```
 
 Errors:
@@ -415,11 +425,12 @@ curl -s -X DELETE localhost:8000/tenants/00000000-0000-0000-0000-000000000000   
 ### `GET /tasks`
 
 Query parameters: `tenant_id`, `status` (accepted|in_progress|done|failed),
-`type` (deploy|update|destroy), `limit` and `cursor`.
+`type` (deploy|update|destroy), `limit` and `cursor`. `requested_name` is the
+new name an `update` task applies when it is done, and `null` for other types.
 
 ```bash
 curl -s "localhost:8000/tasks?tenant_id=<id>"
-# {"items":[{"id":"…","type":"deploy","tenant_id":"…","status":"done","error":null,"created_at":"…","updated_at":"…"}],"next_cursor":null}
+# {"items":[{"id":"…","type":"deploy","tenant_id":"…","status":"done","error":null,"requested_name":null,"created_at":"…","updated_at":"…"}],"next_cursor":null}
 curl -s "localhost:8000/tasks?type=destroy&status=failed"
 curl -s "localhost:8000/tasks?tenant_id=nope"    # 422 validation_error
 ```

@@ -96,12 +96,18 @@ func (s *Store) ApplyUpdate(ctx context.Context, msg domain.UpdateMessage) (Upda
 		if err != nil {
 			return err
 		}
+		// A rename takes effect only when its update task succeeds. On
+		// failure newName stays nil and COALESCE keeps the current name.
+		var newName *string
+		if task.Type == domain.TaskUpdate && task.Status == domain.TaskDone {
+			newName = task.RequestedName
+		}
 		tenant, err = scanTenant(tx.QueryRow(ctx, `
 			UPDATE tenants
-			SET status = $2, version = version + 1, updated_at = now()
+			SET status = $2, name = COALESCE($3, name), version = version + 1, updated_at = now()
 			WHERE id = $1
 			RETURNING `+tenantColumns,
-			tenant.ID, string(next)))
+			tenant.ID, string(next), newName))
 		if err != nil {
 			return fmt.Errorf("update tenant: %w", err)
 		}

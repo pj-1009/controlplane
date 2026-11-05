@@ -53,7 +53,7 @@ func (s *Store) CreateTenant(ctx context.Context, slug, name string) (domain.Ten
 			}
 			return fmt.Errorf("insert tenant: %w", err)
 		}
-		task, err = insertTaskWithOutbox(ctx, tx, tenant.ID, domain.TaskDeploy)
+		task, err = insertTaskWithOutbox(ctx, tx, tenant.ID, domain.TaskDeploy, nil)
 		return err
 	})
 	if err != nil {
@@ -62,19 +62,21 @@ func (s *Store) CreateTenant(ctx context.Context, slug, name string) (domain.Ten
 	return tenant, task, nil
 }
 
-// UpdateTenant renames an active tenant whose version matches, moving it to
-// updating and creating an update task.
+// UpdateTenant starts renaming an active tenant whose version matches: it
+// moves the tenant to updating and creates an update task that carries the
+// new name. The tenant keeps its current name until that task is done (see
+// ApplyUpdate), so a failed update does not leave a half-applied rename.
 func (s *Store) UpdateTenant(ctx context.Context, id uuid.UUID, name string, version int64) (domain.Tenant, domain.Task, error) {
 	return s.transitionTenant(ctx, id, domain.TaskUpdate, domain.UpdatableFrom(), func(tx pgx.Tx, next domain.TenantStatus) pgx.Row {
 		// Optimistic locking in one statement: the version and status checks
 		// and the write happen atomically, so there is no check-then-act race.
 		return tx.QueryRow(ctx, `
 			UPDATE tenants
-			SET name = $2, status = $3, version = version + 1, updated_at = now()
-			WHERE id = $1 AND version = $4 AND status = ANY($5)
+			SET status = $2, version = version + 1, updated_at = now()
+			WHERE id = $1 AND version = $3 AND status = ANY($4)
 			RETURNING `+tenantColumns,
-			id, name, string(next), version, tenantStatusStrings(domain.UpdatableFrom()))
-	}, &version)
+			id, string(next), version, tenantStatusStrings(domain.UpdatableFrom()))
+	}, &version, &name)
 }
 
 // DeleteTenant moves an active or failed tenant to destroying and creates a
@@ -87,12 +89,13 @@ func (s *Store) DeleteTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, 
 			WHERE id = $1 AND status = ANY($3)
 			RETURNING `+tenantColumns,
 			id, string(next), tenantStatusStrings(domain.DeletableFrom()))
-	}, nil)
+	}, nil, nil)
 }
 
 // transitionTenant runs a conditional tenant UPDATE and, if it matched, adds
 // the task and outbox row. If it matched nothing, it re-reads the tenant to
-// report why. wantVersion is nil when the caller does not check versions.
+// report why. wantVersion is nil when the caller does not check versions;
+// requestedName is stored on the task (update tasks only).
 func (s *Store) transitionTenant(
 	ctx context.Context,
 	id uuid.UUID,
@@ -100,6 +103,7 @@ func (s *Store) transitionTenant(
 	allowedFrom []domain.TenantStatus,
 	update func(tx pgx.Tx, next domain.TenantStatus) pgx.Row,
 	wantVersion *int64,
+	requestedName *string,
 ) (domain.Tenant, domain.Task, error) {
 	next, err := domain.PendingStatus(typ)
 	if err != nil {
@@ -119,7 +123,7 @@ func (s *Store) transitionTenant(
 		if err != nil {
 			return fmt.Errorf("update tenant: %w", err)
 		}
-		task, err = insertTaskWithOutbox(ctx, tx, tenant.ID, typ)
+		task, err = insertTaskWithOutbox(ctx, tx, tenant.ID, typ, requestedName)
 		return err
 	})
 	if err != nil {

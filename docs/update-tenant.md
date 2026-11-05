@@ -6,19 +6,23 @@ do, and each way an update can fail. Every output below is from a real run.
 ## How update works
 
 ```
-active ──PATCH──▶ updating ──worker done──▶ active
-                      └─────worker failed──▶ failed
+active ──PATCH──▶ updating ──worker done──▶ active  (new name applied)
+                      └─────worker failed──▶ failed  (old name kept)
 ```
 
 - PATCH is allowed only when the tenant is **`active`**.
 - The body must include the tenant's current **`version`**. This is *optimistic
   locking*: you prove which version you read, and the update only applies if
   nobody changed the tenant since.
+- **The new name is applied only when the update succeeds.** PATCH stores the
+  requested name on the update task (`requested_name`). The tenant keeps its
+  current name while `updating`, takes the new one when the task is `done`, and
+  keeps the old one if the task `failed`.
 - Every status change adds 1 to `version`, so one successful PATCH moves it by
   2: once to `updating`, once back to `active`.
 
-Start the stack first (`make up`), and have an active tenant. The examples use
-`globex` from [Create a tenant](create-tenant.md).
+Start the stack first (`make up`) and have an active tenant. See
+[Create a tenant](create-tenant.md); the examples below use `wayne`.
 
 ## Success
 
@@ -29,7 +33,7 @@ curl -s localhost:8000/tenants/$ID
 ```
 
 ```json
-{"id":"6990affc-0bd0-4903-9784-cd1fb0195ab4","slug":"globex","name":"Globex Corporation","status":"active","version":2,"created_at":"2026-11-04T18:06:54.846Z","updated_at":"2026-11-04T18:06:57.271Z"}
+{"id":"8c2e2bf5-928c-4df5-9a61-f1537b17e945","slug":"wayne","name":"Wayne Enterprises","status":"active","version":2,"created_at":"2026-11-05T01:08:43.803Z","updated_at":"2026-11-05T01:08:46.870Z"}
 ```
 
 Send the new name with that version:
@@ -37,35 +41,38 @@ Send the new name with that version:
 ```bash
 curl -s -w '\nHTTP %{http_code}\n' -X PATCH localhost:8000/tenants/$ID \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Globex Inc","version":2}'
+  -d '{"name":"Wayne Corp","version":2}'
 ```
 
 ```
-{"id":"6990affc-0bd0-4903-9784-cd1fb0195ab4","slug":"globex","name":"Globex Inc","status":"updating","version":3,"created_at":"2026-11-04T18:06:54.846Z","updated_at":"2026-11-04T18:12:58.408Z"}
+{"id":"8c2e2bf5-928c-4df5-9a61-f1537b17e945","slug":"wayne","name":"Wayne Enterprises","status":"updating","version":3,"created_at":"2026-11-05T01:08:43.803Z","updated_at":"2026-11-05T01:08:48.845Z"}
 
 HTTP 202
 ```
 
-**202 Accepted**: the new name is saved, the tenant is `updating` at version 3,
-and an `update` task has been queued. Wait 3–5 seconds:
-
-```bash
-curl -s localhost:8000/tenants/$ID
-```
-
-```json
-{"id":"6990affc-0bd0-4903-9784-cd1fb0195ab4","slug":"globex","name":"Globex Inc","status":"active","version":4,"created_at":"2026-11-04T18:06:54.846Z","updated_at":"2026-11-04T18:13:01.643Z"}
-```
-
-Back to `active`, now at version 4. The task that did the work:
+**202 Accepted**: the tenant is `updating` at version 3. Its name is still
+**Wayne Enterprises**; the new name waits on the update task:
 
 ```bash
 curl -s "localhost:8000/tasks?tenant_id=$ID&type=update"
 ```
 
 ```json
-{"items":[{"type":"update","status":"done", ...}],"next_cursor":null}
+{"items":[{"id":"1831f500-f00a-4738-8056-d900b926a5ed","type":"update","tenant_id":"8c2e2bf5-928c-4df5-9a61-f1537b17e945","status":"accepted","error":null,"requested_name":"Wayne Corp","created_at":"2026-11-05T01:08:48.845Z","updated_at":"2026-11-05T01:08:48.845Z"}],"next_cursor":null}
 ```
+
+Wait 3–5 seconds:
+
+```bash
+curl -s localhost:8000/tenants/$ID
+```
+
+```json
+{"id":"8c2e2bf5-928c-4df5-9a61-f1537b17e945","slug":"wayne","name":"Wayne Corp","status":"active","version":4,"created_at":"2026-11-05T01:08:43.803Z","updated_at":"2026-11-05T01:08:52.207Z"}
+```
+
+The task finished `done`, so the tenant now has the new name **Wayne Corp**, is
+`active` again, and is at version 4.
 
 Only `name` can be changed. The slug is permanent.
 
@@ -81,7 +88,7 @@ While the first PATCH is still being applied, the tenant is `updating`:
 
 ```bash
 curl -s -X PATCH localhost:8000/tenants/$ID -H 'Content-Type: application/json' \
-  -d '{"name":"Globex Inc","version":2}'
+  -d '{"name":"Wayne Corp","version":2}'
 ```
 
 ```json
@@ -94,24 +101,21 @@ The tenant is `active` again, but at version 4, so `"version":2` is out of date:
 
 ```bash
 curl -s -X PATCH localhost:8000/tenants/$ID -H 'Content-Type: application/json' \
-  -d '{"name":"Globex Inc","version":2}'
+  -d '{"name":"Wayne Corp","version":2}'
 ```
 
 ```json
 {"error":{"code":"tenant_version_conflict","message":"the tenant was modified; re-read it and retry with the current version","details":{}}}
 ```
 
-Nothing changed. The tenant is still:
-
-```json
-{"name":"Globex Inc","status":"active","version":4}
-```
-
+Nothing changed: the tenant is still `"name":"Wayne Corp","status":"active","version":4`,
 and there is still exactly **one** `update` task.
 
 ### Send many at the same moment
 
-Ten identical PATCHes in parallel, all with the same version:
+Ten identical PATCHes in parallel, all with the tenant's current version.
+This run was on another tenant, `globex`, which was at version 6; use your
+tenant's current version:
 
 ```bash
 seq 10 | xargs -P 10 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
@@ -137,14 +141,27 @@ simplified here, the real query passes the statuses as parameters):
 
 ```sql
 UPDATE tenants
-SET name = $2, status = 'updating', version = version + 1, updated_at = now()
-WHERE id = $1 AND version = $4 AND status = 'active'
+SET status = 'updating', version = version + 1, updated_at = now()
+WHERE id = $1 AND version = $3 AND status = 'active'
 ```
 
 Postgres runs it atomically. The first request matches the row and bumps the
 version; every other request with the same version then matches zero rows.
 Nothing can slip in between a check and the write, because there is no
-separate check.
+separate check. In the same transaction, the winner inserts the update task
+carrying the requested name.
+
+When the worker reports the task `done`, the consumer applies the name
+([`internal/store/updates.go`](../internal/store/updates.go), `ApplyUpdate`):
+
+```sql
+UPDATE tenants
+SET status = 'active', name = COALESCE($3, name), version = version + 1, updated_at = now()
+WHERE id = $1
+```
+
+`$3` is the task's `requested_name` when the update is `done`, and NULL when it
+`failed`, so `COALESCE` keeps the old name.
 
 ### How to retry correctly
 
@@ -154,11 +171,12 @@ again and use the version it reports:
 ```bash
 curl -s localhost:8000/tenants/$ID          # "version":4
 curl -s -X PATCH localhost:8000/tenants/$ID -H 'Content-Type: application/json' \
-  -d '{"name":"Globex International","version":4}'   # 202
+  -d '{"name":"Wayne Holdings","version":4}'   # 202
 ```
 
-If you are unsure whether your earlier PATCH went through (say, after a
-timeout), read the tenant. If it shows your new name, it went through.
+If you are unsure whether an earlier PATCH went through (say, after a timeout),
+look at the tenant's update tasks: `GET /tasks?tenant_id=$ID&type=update` shows
+each one with its `requested_name` and `status`.
 
 ## Failure cases
 
@@ -208,32 +226,35 @@ Each is a 422 `validation_error`.
 ### The update job itself fails
 
 The PATCH is accepted (202), but the background job fails. Use
-`make worker-fail` to cause this:
+`make worker-fail` to cause this. Continuing with `wayne`, now named
+**Wayne Corp** at version 4:
 
 ```bash
 make worker-fail
 curl -s -X PATCH localhost:8000/tenants/$ID -H 'Content-Type: application/json' \
-  -d '{"name":"Stark Enterprises","version":2}'      # 202, "status":"updating"
+  -d '{"name":"Wayne Holdings","version":4}'      # 202, "status":"updating"
 ```
 
 A few seconds later:
 
 ```json
-{"id":"05daaf18-8ab8-4f9a-8e1f-c9aebc6dee25","slug":"stark","name":"Stark Enterprises","status":"failed","version":4,"created_at":"2026-11-04T18:13:35.549Z","updated_at":"2026-11-04T18:13:44.777Z"}
+{"id":"8c2e2bf5-928c-4df5-9a61-f1537b17e945","slug":"wayne","name":"Wayne Corp","status":"failed","version":6,"created_at":"2026-11-05T01:08:43.803Z","updated_at":"2026-11-05T01:08:57.668Z"}
 ```
 
-The task shows why:
+The tenant is `failed` and **keeps its old name, Wayne Corp**. The rejected
+name is only on the failed task, next to the reason:
 
-```json
-{"type":"update","status":"failed","error":"simulated update failure"}
+```bash
+curl -s "localhost:8000/tasks?tenant_id=$ID&type=update" | jq -c '.items[] | {status, requested_name, error}'
 ```
 
-Two things to know:
+```
+{"status":"done","requested_name":"Wayne Corp","error":null}
+{"status":"failed","requested_name":"Wayne Holdings","error":"simulated update failure"}
+```
 
-- **The new name is kept.** The name is saved when the PATCH is accepted; a
-  failed job doesn't roll it back.
-- **A failed tenant can't be updated again** (409 `tenant_update_not_allowed`).
-  It can only be deleted; see [Delete a tenant](delete-tenant.md).
+A `failed` tenant can't be updated again (409 `tenant_update_not_allowed`).
+It can only be deleted; see [Delete a tenant](delete-tenant.md).
 
 Run `make worker-normal` afterwards.
 
@@ -241,11 +262,11 @@ Run `make worker-normal` afterwards.
 
 | Situation | PATCH returns | Tenant after |
 |---|---|---|
-| `active`, current version | 202 | `updating`, then `active` (version +2) |
+| `active`, current version | 202 (old name, `updating`) | `active` with the new name (version +2) |
 | Same PATCH repeated, while `updating` | 409 `tenant_update_not_allowed` | unchanged |
 | Same PATCH repeated, after it finished | 409 `tenant_version_conflict` | unchanged |
 | N identical PATCHes at once | one 202, N−1 × 409 | changed once |
 | Not `active` | 409 `tenant_update_not_allowed` | unchanged |
 | Unknown id, or not a UUID | 404 `tenant_not_found` | — |
 | Invalid body | 422 `validation_error` | unchanged |
-| Accepted, but the job fails | 202 | `failed`, new name kept |
+| Accepted, but the job fails | 202 | `failed`, **old name kept** |

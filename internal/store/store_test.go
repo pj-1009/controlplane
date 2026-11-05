@@ -92,7 +92,7 @@ func TestRolledBackTransactionLeavesNoOutboxRow(t *testing.T) {
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE tasks SET status = 'done' WHERE tenant_id = $1`, tenant.ID)
 		require.NoError(t, err)
-		_, err = insertTaskWithOutbox(ctx, tx, tenant.ID, domain.TaskUpdate)
+		_, err = insertTaskWithOutbox(ctx, tx, tenant.ID, domain.TaskUpdate, nil)
 		require.NoError(t, err)
 		return boom
 	})
@@ -128,9 +128,44 @@ func TestUpdateTenantErrors(t *testing.T) {
 	updated, updateTask, err := s.UpdateTenant(ctx, tenant.ID, "New", active.Version)
 	require.NoError(t, err)
 	assert.Equal(t, domain.TenantUpdating, updated.Status)
-	assert.Equal(t, "New", updated.Name)
+	assert.Equal(t, "Acme", updated.Name, "the name changes only when the update task is done")
 	assert.Equal(t, int64(3), updated.Version)
 	assert.Equal(t, domain.TaskUpdate, updateTask.Type)
+	require.NotNil(t, updateTask.RequestedName)
+	assert.Equal(t, "New", *updateTask.RequestedName)
+}
+
+func TestUpdateRenamesOnlyWhenDone(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := testutil.Context(t)
+
+	for _, tc := range []struct {
+		result     domain.TaskStatus
+		wantStatus domain.TenantStatus
+		wantName   string
+	}{
+		{domain.TaskDone, domain.TenantActive, "New"},
+		{domain.TaskFailed, domain.TenantFailed, "Acme"},
+	} {
+		t.Run(string(tc.result), func(t *testing.T) {
+			tenant, task, err := s.CreateTenant(ctx, "acme-"+string(tc.result), "Acme")
+			require.NoError(t, err)
+			active := activate(t, s, task)
+
+			_, updateTask, err := s.UpdateTenant(ctx, tenant.ID, "New", active.Version)
+			require.NoError(t, err)
+
+			res, err := s.ApplyUpdate(ctx, update(updateTask.ID, tc.result))
+			require.NoError(t, err)
+			require.NotNil(t, res.Tenant)
+			assert.Equal(t, tc.wantStatus, res.Tenant.Status)
+			assert.Equal(t, tc.wantName, res.Tenant.Name)
+
+			got, err := s.GetTenant(ctx, tenant.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantName, got.Name)
+		})
+	}
 }
 
 func TestDeleteTenant(t *testing.T) {

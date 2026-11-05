@@ -12,7 +12,7 @@ import (
 	"github.com/pj-1009/controlplane/internal/domain"
 )
 
-const taskColumns = `id, type, tenant_id, status, error, created_at, updated_at`
+const taskColumns = `id, type, tenant_id, status, error, requested_name, created_at, updated_at`
 
 func scanTask(row pgx.Row) (domain.Task, error) {
 	var (
@@ -20,7 +20,7 @@ func scanTask(row pgx.Row) (domain.Task, error) {
 		typ, status          string
 		createdAt, updatedAt time.Time
 	)
-	if err := row.Scan(&t.ID, &typ, &t.TenantID, &status, &t.Error, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&t.ID, &typ, &t.TenantID, &status, &t.Error, &t.RequestedName, &createdAt, &updatedAt); err != nil {
 		return domain.Task{}, err
 	}
 	t.Type = domain.TaskType(typ)

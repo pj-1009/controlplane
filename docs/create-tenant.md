@@ -90,6 +90,7 @@ curl -s "localhost:8000/tasks?tenant_id=$ID"
       "tenant_id": "6990affc-0bd0-4903-9784-cd1fb0195ab4",
       "status": "done",
       "error": null,
+      "requested_name": null,
       "created_at": "2026-11-04T18:06:54.846Z",
       "updated_at": "2026-11-04T18:06:57.271Z"
     }

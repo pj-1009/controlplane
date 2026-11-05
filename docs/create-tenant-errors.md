@@ -152,7 +152,7 @@ curl -s "localhost:8000/tasks?tenant_id=$ID"
 ```
 
 ```json
-{"items":[{"id":"7ac396fc-6536-4e0d-946f-0abf0d7c9ef8","type":"deploy","tenant_id":"ef902811-92b8-48bf-8e93-a61384f12697","status":"failed","error":"simulated deploy failure","created_at":"2026-11-04T18:07:25.895Z","updated_at":"2026-11-04T18:07:28.677Z"}],"next_cursor":null}
+{"items":[{"id":"7ac396fc-6536-4e0d-946f-0abf0d7c9ef8","type":"deploy","tenant_id":"ef902811-92b8-48bf-8e93-a61384f12697","status":"failed","error":"simulated deploy failure","requested_name":null,"created_at":"2026-11-04T18:07:25.895Z","updated_at":"2026-11-04T18:07:28.677Z"}],"next_cursor":null}
 ```
 
 **Turn failures off again** before you go on:

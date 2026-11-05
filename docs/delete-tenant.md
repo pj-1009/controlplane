@@ -59,7 +59,7 @@ curl -s "localhost:8000/tasks?tenant_id=$ID&type=destroy"
 ```
 
 ```json
-{"items":[{"id":"c6b64f20-3e5c-4999-9edb-b5dcb72510f3","type":"destroy","tenant_id":"5cb60669-32f8-4b23-91a4-dd0507a6dce2","status":"done","error":null,"created_at":"2026-11-04T18:07:43.530Z","updated_at":"2026-11-04T18:07:46.040Z"}],"next_cursor":null}
+{"items":[{"id":"c6b64f20-3e5c-4999-9edb-b5dcb72510f3","type":"destroy","tenant_id":"5cb60669-32f8-4b23-91a4-dd0507a6dce2","status":"done","error":null,"requested_name":null,"created_at":"2026-11-04T18:07:43.530Z","updated_at":"2026-11-04T18:07:46.040Z"}],"next_cursor":null}
 ```
 
 ## Success: delete a failed tenant

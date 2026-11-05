@@ -40,11 +40,14 @@ func (s TaskStatus) Valid() bool {
 // Task is one unit of provisioning work for a tenant. Its ID doubles as the
 // event ID of the message published for it.
 type Task struct {
-	ID        uuid.UUID  `json:"id"`
-	Type      TaskType   `json:"type"`
-	TenantID  uuid.UUID  `json:"tenant_id"`
-	Status    TaskStatus `json:"status"`
-	Error     *string    `json:"error"`
-	CreatedAt Timestamp  `json:"created_at"`
-	UpdatedAt Timestamp  `json:"updated_at"`
+	ID       uuid.UUID  `json:"id"`
+	Type     TaskType   `json:"type"`
+	TenantID uuid.UUID  `json:"tenant_id"`
+	Status   TaskStatus `json:"status"`
+	Error    *string    `json:"error"`
+	// RequestedName is the new tenant name an update task will apply once it
+	// is done. It is nil for deploy and destroy tasks.
+	RequestedName *string   `json:"requested_name"`
+	CreatedAt     Timestamp `json:"created_at"`
+	UpdatedAt     Timestamp `json:"updated_at"`
 }

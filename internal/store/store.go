@@ -77,12 +77,14 @@ func isUniqueViolation(err error, constraint string) bool {
 // The outbox row is written in the same transaction as the tenant and task
 // changes, so either all of them commit or none do. Publishing happens later
 // in the relay; the HTTP request never talks to the broker.
-func insertTaskWithOutbox(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, typ domain.TaskType) (domain.Task, error) {
+//
+// requestedName is the new tenant name for an update task, nil otherwise.
+func insertTaskWithOutbox(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, typ domain.TaskType, requestedName *string) (domain.Task, error) {
 	row := tx.QueryRow(ctx, `
-		INSERT INTO tasks (type, tenant_id, status)
-		VALUES ($1, $2, $3)
+		INSERT INTO tasks (type, tenant_id, status, requested_name)
+		VALUES ($1, $2, $3, $4)
 		RETURNING `+taskColumns,
-		string(typ), tenantID, string(domain.TaskAccepted))
+		string(typ), tenantID, string(domain.TaskAccepted), requestedName)
 	task, err := scanTask(row)
 	if err != nil {
 		if isUniqueViolation(err, openTaskConstraint) {

@@ -310,8 +310,12 @@ func TestPatchTenant(t *testing.T) {
 	resp = e.do(http.MethodPatch, "/tenants/"+id, map[string]any{"name": "Acme 2", "version": version})
 	require.Equal(t, http.StatusAccepted, resp.status)
 	assert.Equal(t, "updating", resp.body["status"])
-	assert.Equal(t, "Acme 2", resp.body["name"])
+	assert.Equal(t, tenant["name"], resp.body["name"], "the name changes only when the update is done")
 	assert.Equal(t, version+1, resp.body["version"])
+
+	tasks := e.do(http.MethodGet, "/tasks?type=update&tenant_id="+id, nil)
+	require.Len(t, tasks.body["items"], 1)
+	assert.Equal(t, "Acme 2", tasks.body["items"].([]any)[0].(map[string]any)["requested_name"])
 
 	// While updating, further changes are refused.
 	resp = e.do(http.MethodPatch, "/tenants/"+id, map[string]any{"name": "Acme 3", "version": version + 1})
@@ -322,7 +326,22 @@ func TestPatchTenant(t *testing.T) {
 	e.finishOpenTask(id, domain.TaskDone)
 	resp = e.do(http.MethodGet, "/tenants/"+id, nil)
 	assert.Equal(t, "active", resp.body["status"])
+	assert.Equal(t, "Acme 2", resp.body["name"], "a done update applies the new name")
 	assert.Equal(t, version+2, resp.body["version"], "worker-applied change bumps version")
+}
+
+func TestPatchTenantFailedUpdateKeepsName(t *testing.T) {
+	e := newEnv(t)
+	tenant := e.activeTenant("acme")
+	id := tenant["id"].(string)
+
+	resp := e.do(http.MethodPatch, "/tenants/"+id, map[string]any{"name": "Acme 2", "version": tenant["version"]})
+	require.Equal(t, http.StatusAccepted, resp.status)
+
+	e.finishOpenTask(id, domain.TaskFailed)
+	resp = e.do(http.MethodGet, "/tenants/"+id, nil)
+	assert.Equal(t, "failed", resp.body["status"])
+	assert.Equal(t, tenant["name"], resp.body["name"], "a failed update leaves the old name")
 }
 
 func TestDeleteTenant(t *testing.T) {
