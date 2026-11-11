@@ -129,25 +129,26 @@ sequenceDiagram
 ```
 
 ```
-cmd/controlplane/    API + outbox relay + update consumer, wired with errgroup
-cmd/worker/          worker CLI: flags, env fallback, validation
-cmd/racetest/        the `make race` load test
-internal/domain/     types, errors, message schemas, state machine (pure functions)
-internal/store/      the Store interface every database provider implements, plus paging types
+cmd/controlplane/          API + outbox relay + update consumer, wired with errgroup
+cmd/worker/                worker CLI: flags, env fallback, validation
+cmd/racetest/              the `make race` load test
+internal/domain/           types, errors, message schemas, state machine (pure functions)
+internal/store/            the Store interface every database provider implements, plus paging types
 internal/store/postgres/   the Postgres provider: all SQL, and its migrations/ (numbered .sql, applied at startup)
 internal/store/memory/     an in-memory provider, proving the interface is provider-neutral
 internal/store/storetest/  conformance suite every provider must pass
 internal/store/drivers/    picks a provider by name (DB_DRIVER)
-internal/api/        router, handlers, validation, error mapping
-internal/outbox/     relay loop
-internal/consumer/   update consumer
-internal/broker/     reconnecting AMQP connection, topology, publish with confirms, consume loop
-internal/worker/     worker logic, separate from main so end-to-end tests can run it
-internal/retry/      backoff with jitter, shared by reconnects and consumer retries
-internal/config/     env config and logger
-internal/testutil/   test database and queue isolation
-internal/e2e/        end-to-end tests, everything in one process
-scripts/             publish_update.sh
+internal/api/              router, handlers, validation, error mapping
+internal/outbox/           relay loop
+internal/consumer/         update consumer
+internal/broker/           reconnecting AMQP connection, topology, publish with confirms, consume loop
+internal/worker/           worker logic, separate from main so end-to-end tests can run it
+internal/retry/            backoff with jitter, shared by reconnects and consumer retries
+internal/config/           env config and logger
+internal/testutil/         test stores (any provider, via TEST_DB_DRIVER) and queue isolation
+internal/e2e/              end-to-end tests, everything in one process
+spec/                      openapi.yaml, the API contract, and the checker the tests use
+scripts/                   publish_update.sh
 ```
 
 ## Design decisions
