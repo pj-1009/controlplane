@@ -53,6 +53,7 @@ and one table maps each to an HTTP status.
 | `GET /tasks` | 200 | 422 `validation_error` (bad `tenant_id`, `status`, `type`, `limit` or `cursor`) |
 | `GET /tasks/{id}` | 200 | 404 `task_not_found` |
 | `GET /healthz` | 200 | 503 `service_unavailable` |
+| `GET /livez` | 200 | none: it checks no dependency |
 
 Any endpoint can also return 500 `internal_error`, and any wrong URL or method
 gives 404 `route_not_found` or 405 `method_not_allowed`.

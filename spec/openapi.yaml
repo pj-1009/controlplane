@@ -33,6 +33,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServiceUnavailableError"
 
+  /livez:
+    get:
+      operationId: getLiveness
+      summary: Check that the process is serving HTTP
+      description: |
+        Checks no dependency, so a database or RabbitMQ outage doesn't fail
+        it. It backs the Kubernetes liveness probe; readiness uses /healthz.
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Liveness"
+
   /tenants:
     post:
       operationId: createTenant
@@ -381,6 +396,14 @@ components:
           type: string
           nullable: true
           description: Pass as `cursor` to get the next page; null on the last page.
+    Liveness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
     Health:
       type: object
       additionalProperties: false

@@ -44,7 +44,8 @@ func TestRoutesMatchSpec(t *testing.T) {
 }
 
 // The integration tests check every normal response against the spec. These
-// cover the two that need a broken dependency: 500 and 503.
+// cover the two that need a broken dependency, 500 and 503, and /livez,
+// which must stay 200 even when a dependency is down.
 func TestErrorResponsesMatchSpec(t *testing.T) {
 	contract, err := spec.Load()
 	require.NoError(t, err)
@@ -52,12 +53,24 @@ func TestErrorResponsesMatchSpec(t *testing.T) {
 	unhealthy := HealthCheck{Name: "database", Check: func(context.Context) error { return errors.New("down") }}
 	router := NewRouter(panicStore{}, logger, unhealthy)
 
-	for _, path := range []string{"/tenants/" + uuid.NewString(), "/tenants", "/healthz"} {
+	for _, path := range []string{"/tenants/" + uuid.NewString(), "/tenants", "/healthz", "/livez"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			assert.NoError(t, contract.ValidateResponse(req, rec.Code, rec.Header(), rec.Body.Bytes()))
 		})
+	}
+}
+
+func TestLivezIgnoresDependencies(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	down := HealthCheck{Name: "database", Check: func(context.Context) error { return errors.New("down") }}
+	router := NewRouter(panicStore{}, logger, down)
+
+	for path, want := range map[string]int{"/livez": http.StatusOK, "/healthz": http.StatusServiceUnavailable} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, want, rec.Code, path)
 	}
 }

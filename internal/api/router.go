@@ -53,6 +53,7 @@ func NewRouter(s Store, logger *slog.Logger, checks ...HealthCheck) http.Handler
 	})
 
 	r.Get("/healthz", h.healthz)
+	r.Get("/livez", h.livez)
 
 	r.Route("/tenants", func(r chi.Router) {
 		r.Post("/", h.createTenant)
@@ -88,6 +89,14 @@ func (h *handler) healthz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "checks": results})
+}
+
+// livez reports only that the process is serving HTTP. It checks no
+// dependency on purpose: it backs the Kubernetes liveness probe, and a
+// database outage must not make Kubernetes restart every pod. Readiness
+// uses /healthz instead.
+func (h *handler) livez(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // pathID parses the {id} URL parameter. An unparsable id can't match any
