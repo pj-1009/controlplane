@@ -1,0 +1,93 @@
+# The API, outbox relay and update consumer: one stateless process, so it
+# runs as a Deployment with several replicas. SKIP LOCKED in the relay, the
+# shared dedup table and the migration lock make that safe.
+apiVersion: v1
+kind: Service
+metadata:
+  name: controlplane
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: controlplane
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      nodePort: 30080 # mapped to localhost:8080 by kind-cluster.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controlplane
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: controlplane
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: controlplane
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532 # distroless "nonroot"
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: controlplane
+          image: controlplane
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef: { name: controlplane-config }
+          env:
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: controlplane-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: controlplane-secrets, key: POSTGRES_PASSWORD } }
+            - name: POSTGRES_DB
+              valueFrom: { secretKeyRef: { name: controlplane-secrets, key: POSTGRES_DB } }
+            - name: RABBITMQ_USER
+              valueFrom: { secretKeyRef: { name: controlplane-secrets, key: RABBITMQ_USER } }
+            - name: RABBITMQ_PASSWORD
+              valueFrom: { secretKeyRef: { name: controlplane-secrets, key: RABBITMQ_PASSWORD } }
+            # $(VAR) expands the variables defined above.
+            - name: DATABASE_URL
+              value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)?sslmode=disable
+            - name: AMQP_URL
+              value: amqp://$(RABBITMQ_USER):$(RABBITMQ_PASSWORD)@rabbitmq:5672/
+          # The server listens only once the database is connected and
+          # migrated, so allow up to a minute before liveness starts.
+          startupProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          # Restart only if the process itself stops answering.
+          livenessProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          # Take the pod out of the Service while the database or broker is
+          # unreachable, without restarting it.
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          # Give the Service time to stop routing here before SIGTERM, so
+          # in-flight requests aren't cut off; then the server drains.
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

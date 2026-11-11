@@ -20,6 +20,10 @@ make test    # every test, with -race, in a golang container against real postgr
 - API: <http://localhost:8000> (health: `/healthz`)
 - RabbitMQ UI: <http://localhost:15672>, login from `.env`
 
+To run on a local Kubernetes cluster instead, install
+[kind](https://kind.sigs.k8s.io/) and run `make k8s-up`: the API is then on
+<http://localhost:8080>. See [docs/kubernetes.md](docs/kubernetes.md).
+
 The first `make` creates a git-ignored `.env` from `.env.example` with random
 Postgres and RabbitMQ passwords, so no secret is in the repo. Postgres keeps the password it first
 started with: if you delete `.env` or switch checkouts, run
@@ -42,12 +46,15 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"    # the deploy task, "status":"do
 | `make worker-fail` / `worker-normal` | Restart the worker failing every task / with defaults |
 | `make race` | 20 concurrent same-slug creates and same-version PATCHes against the running API |
 | `make publish ARGS="…"` | Publish a hand-written update (see [Negative scenarios](#negative-scenarios)) |
+| `make k8s-up` / `k8s-status` / `k8s-logs` | Deploy to a local kind cluster and wait until ready / list pods / follow logs from every pod |
+| `make k8s-down` / `k8s-clean` | Remove the app from the cluster (data kept) / delete the cluster |
 
 Guides with full outputs are in [`docs/`](docs/README.md): [setup](docs/setup.md),
 [create](docs/create-tenant.md), [create errors](docs/create-tenant-errors.md),
 [update](docs/update-tenant.md), [delete](docs/delete-tenant.md),
-[tests](docs/testing.md), [CI/CD](docs/cicd.md), [error messages](docs/errors.md)
-[the API contract](docs/spec-driven.md) and [database providers](docs/database-providers.md).
+[tests](docs/testing.md), [CI/CD](docs/cicd.md), [error messages](docs/errors.md),
+[the API contract](docs/spec-driven.md), [database providers](docs/database-providers.md)
+and [Kubernetes](docs/kubernetes.md).
 
 ## Architecture
 
@@ -147,6 +154,7 @@ internal/retry/            backoff with jitter, shared by reconnects and consume
 internal/config/           env config and logger
 internal/testutil/         test stores (any provider, via TEST_DB_DRIVER) and queue isolation
 internal/e2e/              end-to-end tests, everything in one process
+deploy/k8s/                Kubernetes manifests (Kustomize) and the local kind cluster config
 spec/                      openapi.yaml, the API contract, and the checker the tests use
 scripts/                   publish_update.sh
 ```
@@ -327,13 +335,14 @@ curl -s "localhost:8000/tasks?type=destroy&status=failed"
 curl -s "localhost:8000/tasks?tenant_id=nope"    # 422 validation_error
 ```
 
-**`GET /tasks/{id}`** and **`GET /healthz`**
+**`GET /tasks/{id}`**, **`GET /healthz`** and **`GET /livez`**
 
 ```bash
 curl -s localhost:8000/tasks/<task_id>     # 200
 curl -s localhost:8000/tasks/not-a-uuid    # 404 task_not_found
 curl -s localhost:8000/healthz             # 200 {"status":"ok","checks":{"database":"ok","broker":"ok"}}
 # 503 {"error":{"code":"service_unavailable",…,"details":{"broker":"broker not connected","database":"ok"}}}
+curl -s localhost:8000/livez               # 200 {"status":"ok"}, even when the database is down (liveness probe)
 ```
 
 **Messages.** Task messages go to `tasks` (persistent, `MessageId` = task id);

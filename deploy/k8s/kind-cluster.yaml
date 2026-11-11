@@ -1,0 +1,14 @@
+# A one-node local cluster for `make k8s-up`. The port mappings expose the
+# API and the RabbitMQ UI on localhost, on ports that don't clash with the
+# Docker Compose stack (8000 and 15672), so both can run at once.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080 # controlplane Service nodePort
+        hostPort: 8080
+        listenAddress: 127.0.0.1
+      - containerPort: 31672 # rabbitmq-ui Service nodePort
+        hostPort: 15673
+        listenAddress: 127.0.0.1

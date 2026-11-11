@@ -93,6 +93,9 @@ make check    # lint + security checks + vulnerability scan + all tests
 | `make up` | Start again, with the same data |
 | `make clean` | Stop and **delete** the database and build caches. `.env` is kept. |
 
+To run everything on a local Kubernetes cluster instead of Docker Compose, see
+[Kubernetes](kubernetes.md).
+
 ## Troubleshooting
 
 **`make up` says `container controlplane-controlplane-1 is unhealthy`.**

@@ -6,6 +6,7 @@ covers the design and the API reference.
 | Guide | What it covers |
 |---|---|
 | [Setup](setup.md) | What to install, how to start everything, check it works, and fix common problems |
+| [Kubernetes](kubernetes.md) | Running everything on a local kind cluster with `make k8s-up`, what's deployed, and what to change for a real cluster |
 | [Create a tenant](create-tenant.md) | Create a tenant and watch it go from `provisioning` to `active` |
 | [Create a tenant and see it fail](create-tenant-errors.md) | Every way creation is rejected, and how to make provisioning itself fail |
 | [Update a tenant](update-tenant.md) | Rename a tenant, why repeated or parallel PATCHes apply only once, and each way an update fails |

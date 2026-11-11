@@ -12,3 +12,6 @@ PROMPT_GO.md
 
 # Saved test output from make test.
 /test-results/
+
+# Generated from .env by make k8s-up.
+/deploy/k8s/secret.env
