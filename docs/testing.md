@@ -172,7 +172,7 @@ you why:
 | `make check` | `make lint`, then `make vuln`, then `make test`; stops at the first failure | all three of the above |
 | `make fmt` | Rewrites files to fix formatting (it changes files; it doesn't check) | — |
 | `make test-memory` | The API, consumer, relay and end-to-end tests on the in-memory store instead of Postgres (needs only RabbitMQ) | `ok` for the four packages |
-| `make race` | A standalone load test against the **running** stack (needs `make up`) | `OK: exactly one winner in each race.` |
+| `make race` | A standalone load test against the **running** stack (needs `make up`; `make k8s-race` runs it against the Kubernetes cluster) | `OK: exactly one winner in each race.` |
 
 `make race` output:
 

@@ -13,7 +13,7 @@ DOCKER_GO := docker run --rm -v "$(CURDIR)":/src -w /src \
 	-e GOFLAGS=-buildvcs=false
 
 .PHONY: up down clean logs test test-memory check lint vuln fmt worker-fail worker-normal race publish \
-	k8s-up k8s-status k8s-logs k8s-down k8s-clean k8s-worker-fail k8s-worker-normal k8s-race
+	k8s-up k8s-status k8s-logs k8s-down k8s-clean k8s-worker-fail k8s-worker-normal k8s-race k8s-publish
 
 # .env holds the local passwords and is git-ignored. It is created once from
 # .env.example with random passwords. Delete it only together with the volumes
@@ -129,6 +129,9 @@ k8s-worker-normal: ## Undo k8s-worker-fail.
 k8s-race: ## Run the race test against the cluster's API.
 	docker build --target racetest -t controlplane-racetest:local .
 	docker run --rm -e API_URL=http://host.docker.internal:8080 controlplane-racetest:local
+
+k8s-publish: ## Publish a hand-written update on the cluster, e.g. make k8s-publish ARGS="poison".
+	RABBITMQ_EXEC="$(KUBECTL) exec -i rabbitmq-0 --" ./scripts/publish_update.sh $(ARGS)
 
 k8s-down: ## Remove the app from the cluster but keep the data volumes and the cluster.
 	$(KUBECTL) delete deployment,statefulset,service,configmap,secret -l app.kubernetes.io/part-of=controlplane

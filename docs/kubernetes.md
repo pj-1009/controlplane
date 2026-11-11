@@ -98,6 +98,7 @@ same as for Docker Compose: `RABBITMQ_USER` and `RABBITMQ_PASSWORD` in `.env`.
 | `make k8s-worker-fail` | Make every task fail (sets `WORKER_FAIL_RATE=1` on the worker) |
 | `make k8s-worker-normal` | Undo `k8s-worker-fail` |
 | `make k8s-race` | Run the concurrent-requests race test against the cluster's API |
+| `make k8s-publish ARGS="…"` | Publish a hand-written update message, like `make publish` (for example `ARGS=poison`) |
 | `make k8s-down` | Remove the app from the cluster, but keep the cluster and the data volumes |
 | `make k8s-clean` | Delete the whole cluster, data included |
 
@@ -112,6 +113,36 @@ kubectl --context kind-controlplane -n controlplane exec -it postgres-0 -- sh -c
 
 `make test` and `make check` still use Docker Compose for Postgres and
 RabbitMQ; they don't need the cluster.
+
+### Following the other guides on Kubernetes
+
+The other guides use the Docker Compose stack. Every step in them also
+works on the cluster. Use port **8080** instead of 8000, and swap these
+commands:
+
+| In the guides (Docker Compose) | On Kubernetes |
+|---|---|
+| `make up` | `make k8s-up` |
+| `make down` / `make clean` | `make k8s-down` / `make k8s-clean` |
+| `make logs` | `make k8s-logs` |
+| `make worker-fail` / `make worker-normal` | `make k8s-worker-fail` / `make k8s-worker-normal` |
+| `make race` | `make k8s-race` |
+| `make publish ARGS="…"` | `make k8s-publish ARGS="…"` |
+| `WORKER_DUPLICATE_RATE=1 docker compose up -d --no-deps --force-recreate worker` | `kubectl … set env deployment/worker WORKER_DUPLICATE_RATE=1` (undo with `WORKER_DUPLICATE_RATE-`) |
+| `docker compose up -d --scale worker=3` | `kubectl … scale deployment/worker --replicas=3` |
+| `docker compose exec rabbitmq rabbitmqctl list_queues name messages` | `kubectl … exec rabbitmq-0 -- rabbitmqctl list_queues name messages` |
+| `docker compose logs --tail 20 controlplane` | `kubectl … logs deployment/controlplane --tail 20` |
+| `DB_DRIVER=memory docker compose up -d --wait controlplane` | See [Database providers](database-providers.md#on-kubernetes) |
+
+`kubectl …` is short for `kubectl --context kind-controlplane -n controlplane`.
+
+To save typing the port, set it once and use `$API` in place of
+`localhost:8000`:
+
+```bash
+API=localhost:8080
+curl -s $API/healthz
+```
 
 ## 5. What's deployed
 

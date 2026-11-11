@@ -48,6 +48,7 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"    # the deploy task, "status":"do
 | `make publish ARGS="…"` | Publish a hand-written update (see [Negative scenarios](#negative-scenarios)) |
 | `make k8s-up` / `k8s-status` / `k8s-logs` | Deploy to a local kind cluster and wait until ready / list pods / follow logs from every pod |
 | `make k8s-down` / `k8s-clean` | Remove the app from the cluster (data kept) / delete the cluster |
+| `make k8s-worker-fail` / `k8s-worker-normal` / `k8s-race` / `k8s-publish` | The same as the targets without `k8s-`, against the cluster |
 
 Guides with full outputs are in [`docs/`](docs/README.md): [setup](docs/setup.md),
 [create](docs/create-tenant.md), [create errors](docs/create-tenant-errors.md),
@@ -370,7 +371,8 @@ If interrupted, the task is requeued and the re-run sends the same message ids.
 A flag beats its env var; invalid values exit with code 2. Each task runs in
 its own goroutine, and `-concurrency` is the RabbitMQ prefetch, so a worker
 never holds more than that many unacked tasks. To scale:
-`WORKER_CONCURRENCY=16 make worker-normal`, or `docker compose up -d --scale worker=3`.
+`WORKER_CONCURRENCY=16 make worker-normal`, or `docker compose up -d --scale worker=3`
+(on Kubernetes: `kubectl --context kind-controlplane -n controlplane scale deployment/worker --replicas=3`).
 
 ## Negative scenarios
 
@@ -403,6 +405,21 @@ make race
 # Race 1: 20 concurrent POST /tenants  -> 201 x1, 409 tenant_already_exists x19
 # Race 2: 20 concurrent PATCH, same version -> 202 x1, 409 x19
 ```
+
+On Kubernetes (`make k8s-up`), the same scenarios work with port 8080 and the
+`k8s-` targets:
+
+```bash
+make k8s-worker-fail                 # then create "doomed" on localhost:8080, as above
+make k8s-worker-normal
+make k8s-publish ARGS=poison
+kubectl --context kind-controlplane -n controlplane exec rabbitmq-0 -- rabbitmqctl list_queues name messages
+kubectl --context kind-controlplane -n controlplane set env deployment/worker WORKER_DUPLICATE_RATE=1   # undo: WORKER_DUPLICATE_RATE-
+make k8s-race
+```
+
+[docs/kubernetes.md](docs/kubernetes.md#following-the-other-guides-on-kubernetes)
+lists every Compose command and its Kubernetes equivalent.
 
 PATCH losers in the race see `tenant_update_not_allowed` or
 `tenant_version_conflict`, depending on whether they see the winner's new

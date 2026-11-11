@@ -126,8 +126,9 @@ same `make check` passes locally.
 
 ## Deployment (CD)
 
-There is no deployment pipeline: the project runs locally with Docker Compose.
-The pieces a CD step would use already exist:
+There is no deployment pipeline. The project runs locally, with Docker
+Compose or on a local Kubernetes cluster ([Kubernetes](kubernetes.md)). The
+pieces a CD step would use already exist:
 
 - `docker compose build` produces the `controlplane` and `worker` images from
   the [Dockerfile](../Dockerfile): static binaries on a distroless, non-root base.
@@ -136,5 +137,11 @@ The pieces a CD step would use already exist:
 - Migrations run automatically at startup and take a database lock, so
   several instances starting at once are safe.
 
+- The Kustomize manifests in [deploy/k8s/](../deploy/k8s/) deploy both images,
+  with `/healthz` as the readiness probe and `/livez` as the liveness probe.
+
 A deployment would push those images to a registry after `make check` passes
-on the main branch, and supply real secrets from the platform instead of `.env`.
+on the main branch, set their tags in `kustomization.yaml`, supply real
+secrets from the platform instead of `.env`, and run `kubectl apply -k`. See
+[Running on a real cluster](kubernetes.md#7-running-on-a-real-cluster) for
+what else changes.

@@ -30,6 +30,29 @@ To go back, restart without it (or set `DB_DRIVER=postgres` in `.env`):
 docker compose up -d --wait controlplane
 ```
 
+### On Kubernetes
+
+`DB_DRIVER` is in the `controlplane-config` ConfigMap. For a quick try,
+override it on the Deployment, and run **one** replica: each in-memory
+store lives inside its own pod, so two replicas would each see different
+tenants.
+
+```bash
+kubectl --context kind-controlplane -n controlplane scale deployment/controlplane --replicas=1
+kubectl --context kind-controlplane -n controlplane set env deployment/controlplane DB_DRIVER=memory
+```
+
+To go back, remove the override and restore two replicas. The Postgres data
+is still there:
+
+```bash
+kubectl --context kind-controlplane -n controlplane set env deployment/controlplane DB_DRIVER-
+kubectl --context kind-controlplane -n controlplane scale deployment/controlplane --replicas=2
+```
+
+To change it permanently, edit `DB_DRIVER` in
+[kustomization.yaml](../deploy/k8s/kustomization.yaml) and run `make k8s-up`.
+
 An unknown name stops the process at startup:
 
 ```

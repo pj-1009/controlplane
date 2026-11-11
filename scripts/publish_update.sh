@@ -14,6 +14,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 QUEUE="${QUEUE:-task_updates}"
+# How to run a command in the RabbitMQ container. make k8s-publish points it
+# at the rabbitmq-0 pod with kubectl exec.
+read -r -a RABBITMQ_EXEC <<< "${RABBITMQ_EXEC:-docker compose exec -T rabbitmq}"
 
 usage() {
   sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
@@ -24,9 +27,10 @@ publish() {
   local body="$1"
   echo "publishing to ${QUEUE}: ${body}"
   # The login comes from the rabbitmq container's own environment (set from
-  # .env by compose), so this script never handles the password. The queue
-  # and body are passed as positional arguments to avoid quoting issues.
-  docker compose exec -T rabbitmq sh -c \
+  # .env by compose, or from the Secret on Kubernetes), so this script never
+  # handles the password. The queue and body are passed as positional
+  # arguments to avoid quoting issues.
+  "${RABBITMQ_EXEC[@]}" sh -c \
     'rabbitmqadmin -u "$RABBITMQ_DEFAULT_USER" -p "$RABBITMQ_DEFAULT_PASS" \
       publish exchange=amq.default routing_key="$1" \
       properties="{\"content_type\":\"application/json\",\"delivery_mode\":2}" \
@@ -36,7 +40,7 @@ publish() {
 now() {
   # Millisecond UTC timestamp from inside the container, so it works with
   # both GNU and BSD date on the host.
-  docker compose exec -T rabbitmq date -u +%Y-%m-%dT%H:%M:%S.000Z
+  "${RABBITMQ_EXEC[@]}" date -u +%Y-%m-%dT%H:%M:%S.000Z
 }
 
 update() {

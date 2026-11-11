@@ -15,7 +15,8 @@ failed ──DELETE──▶ destroying ──worker done──▶ destroyed
 - The tenant stays readable with `"status":"destroyed"`, for history.
 - Its slug stays taken; it can't be used for a new tenant.
 
-Start the stack first: `make up`.
+Start the stack first: `make up`. On Kubernetes, use `make k8s-up` and port 8080
+(see [Following the other guides on Kubernetes](kubernetes.md#following-the-other-guides-on-kubernetes)).
 
 ## Success: delete an active tenant
 

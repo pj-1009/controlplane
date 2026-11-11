@@ -11,7 +11,8 @@ There are two kinds of failure:
    and the tenant ends up `failed` a few seconds later.
 
 Start the stack first: `make up`. The examples assume a tenant with slug
-`globex` already exists; create it with [Create a tenant](create-tenant.md).
+`globex` already exists; create it with [Create a tenant](create-tenant.md). On Kubernetes, use `make k8s-up` and port 8080
+(see [Following the other guides on Kubernetes](kubernetes.md#following-the-other-guides-on-kubernetes)).
 
 ## 1. Rejected by the API
 

@@ -8,6 +8,9 @@ Start the stack first (see [Setup](setup.md)):
 make up
 ```
 
+On Kubernetes, run `make k8s-up` instead and use port 8080 in every command
+below (see [Following the other guides on Kubernetes](kubernetes.md#following-the-other-guides-on-kubernetes)).
+
 ## 1. Create it
 
 ```bash
@@ -107,6 +110,10 @@ Run this in a second terminal **before** step 1:
 ```bash
 make logs
 ```
+
+On Kubernetes, use `make k8s-logs`. Each line is prefixed with its pod name,
+and the two control plane pods share the work, so a tenant's lines can come
+from either one.
 
 You'll see the tenant travel through the system, in this order:
 

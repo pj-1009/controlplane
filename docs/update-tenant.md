@@ -22,7 +22,8 @@ active ──PATCH──▶ updating ──worker done──▶ active  (new nam
   2: once to `updating`, once back to `active`.
 
 Start the stack first (`make up`) and have an active tenant. See
-[Create a tenant](create-tenant.md); the examples below use `wayne`.
+[Create a tenant](create-tenant.md); the examples below use `wayne`. On Kubernetes, use `make k8s-up` and port 8080
+(see [Following the other guides on Kubernetes](kubernetes.md#following-the-other-guides-on-kubernetes)).
 
 ## Success
 
