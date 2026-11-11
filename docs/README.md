@@ -12,6 +12,7 @@ covers the design and the API reference.
 | [Delete a tenant](delete-tenant.md) | Delete a tenant, see it succeed, and see each way it can fail |
 | [Running the tests](testing.md) | How to run all or part of the tests, read the results, and the other checks (lint, vulnerabilities, race test) |
 | [CI/CD](cicd.md) | Running lint, formatting and vulnerability checks on demand, and using `make check` as a CI gate |
+| [The API contract](spec-driven.md) | `spec/openapi.yaml`, how the tests enforce it, and the spec-first workflow for API changes |
 | [Error messages](errors.md) | Every error code and message, and exactly when each is returned |
 
 Ids and timestamps in the example outputs will differ from yours.

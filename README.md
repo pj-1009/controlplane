@@ -46,7 +46,8 @@ curl -s "localhost:8000/tasks?tenant_id=<id>"    # the deploy task, "status":"do
 Guides with full outputs are in [`docs/`](docs/README.md): [setup](docs/setup.md),
 [create](docs/create-tenant.md), [create errors](docs/create-tenant-errors.md),
 [update](docs/update-tenant.md), [delete](docs/delete-tenant.md),
-[tests](docs/testing.md), [CI/CD](docs/cicd.md) and [error messages](docs/errors.md).
+[tests](docs/testing.md), [CI/CD](docs/cicd.md), [error messages](docs/errors.md)
+and [the API contract](docs/spec-driven.md).
 
 ## Architecture
 
@@ -236,7 +237,8 @@ store's SQL guards and by the consumer.
 
 ## API reference
 
-JSON everywhere; timestamps are UTC with milliseconds (`2026-11-03T10:15:02.123Z`).
+The full contract is [`spec/openapi.yaml`](spec/openapi.yaml); the tests check
+every response against it ([how](docs/spec-driven.md)). JSON everywhere; timestamps are UTC with milliseconds (`2026-11-03T10:15:02.123Z`).
 Every error has the same shape:
 
 ```json

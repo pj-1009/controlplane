@@ -22,14 +22,16 @@ import (
 	"github.com/pj-1009/controlplane/internal/domain"
 	"github.com/pj-1009/controlplane/internal/store"
 	"github.com/pj-1009/controlplane/internal/testutil"
+	"github.com/pj-1009/controlplane/spec"
 )
 
 var timestampPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$`)
 
 type env struct {
-	t     *testing.T
-	url   string
-	store *store.Store
+	t        *testing.T
+	url      string
+	store    *store.Store
+	contract *spec.Contract
 }
 
 func newEnv(t *testing.T) *env {
@@ -38,7 +40,9 @@ func newEnv(t *testing.T) *env {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	srv := httptest.NewServer(api.NewRouter(st, logger, api.HealthCheck{Name: "database", Check: st.Ping}))
 	t.Cleanup(srv.Close)
-	return &env{t: t, url: srv.URL, store: st}
+	contract, err := spec.Load()
+	require.NoError(t, err)
+	return &env{t: t, url: srv.URL, store: st, contract: contract}
 }
 
 type response struct {
@@ -79,8 +83,12 @@ func (e *env) do(method, path string, body any) response {
 	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(e.t, "application/json", resp.Header.Get("Content-Type"))
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(e.t, err)
+	// Every response must match spec/openapi.yaml: status, headers and body.
+	assert.NoError(e.t, e.contract.ValidateResponse(req, resp.StatusCode, resp.Header, raw))
 	out := response{status: resp.StatusCode, header: resp.Header}
-	require.NoError(e.t, json.NewDecoder(resp.Body).Decode(&out.body))
+	require.NoError(e.t, json.Unmarshal(raw, &out.body))
 	return out
 }
 
