@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 const tenantColumns = `id, slug, name, status, version, created_at, updated_at`
@@ -166,16 +167,9 @@ func (s *Store) GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, err
 	return t, nil
 }
 
-// TenantFilter narrows ListTenants. Zero values mean "no filter".
-type TenantFilter struct {
-	Status domain.TenantStatus
-	Limit  int
-	After  *Cursor
-}
-
 // ListTenants returns tenants ordered by (created_at, id).
-func (s *Store) ListTenants(ctx context.Context, f TenantFilter) (Page[domain.Tenant], error) {
-	limit := clampLimit(f.Limit)
+func (s *Store) ListTenants(ctx context.Context, f store.TenantFilter) (store.Page[domain.Tenant], error) {
+	limit := store.ClampLimit(f.Limit)
 	var afterTime *time.Time
 	var afterID *uuid.UUID
 	if f.After != nil {
@@ -190,13 +184,13 @@ func (s *Store) ListTenants(ctx context.Context, f TenantFilter) (Page[domain.Te
 		LIMIT $4`,
 		nullable(string(f.Status)), afterTime, afterID, limit+1)
 	if err != nil {
-		return Page[domain.Tenant]{}, fmt.Errorf("list tenants: %w", err)
+		return store.Page[domain.Tenant]{}, fmt.Errorf("list tenants: %w", err)
 	}
 	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Tenant, error) { return scanTenant(r) })
 	if err != nil {
-		return Page[domain.Tenant]{}, fmt.Errorf("list tenants: %w", err)
+		return store.Page[domain.Tenant]{}, fmt.Errorf("list tenants: %w", err)
 	}
-	return paginate(items, limit, func(t domain.Tenant) Cursor {
-		return Cursor{CreatedAt: t.CreatedAt.Time, ID: t.ID}
+	return store.Paginate(items, limit, func(t domain.Tenant) store.Cursor {
+		return store.Cursor{CreatedAt: t.CreatedAt.Time, ID: t.ID}
 	}), nil
 }

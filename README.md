@@ -47,7 +47,7 @@ Guides with full outputs are in [`docs/`](docs/README.md): [setup](docs/setup.md
 [create](docs/create-tenant.md), [create errors](docs/create-tenant-errors.md),
 [update](docs/update-tenant.md), [delete](docs/delete-tenant.md),
 [tests](docs/testing.md), [CI/CD](docs/cicd.md), [error messages](docs/errors.md)
-and [the API contract](docs/spec-driven.md).
+[the API contract](docs/spec-driven.md) and [database providers](docs/database-providers.md).
 
 ## Architecture
 
@@ -133,7 +133,11 @@ cmd/controlplane/    API + outbox relay + update consumer, wired with errgroup
 cmd/worker/          worker CLI: flags, env fallback, validation
 cmd/racetest/        the `make race` load test
 internal/domain/     types, errors, message schemas, state machine (pure functions)
-internal/store/      all SQL: tenants, tasks, outbox, processed_messages, pagination
+internal/store/      the Store interface every database provider implements, plus paging types
+internal/store/postgres/   the Postgres provider: all SQL, and its migrations/ (numbered .sql, applied at startup)
+internal/store/memory/     an in-memory provider, proving the interface is provider-neutral
+internal/store/storetest/  conformance suite every provider must pass
+internal/store/drivers/    picks a provider by name (DB_DRIVER)
 internal/api/        router, handlers, validation, error mapping
 internal/outbox/     relay loop
 internal/consumer/   update consumer
@@ -143,7 +147,6 @@ internal/retry/      backoff with jitter, shared by reconnects and consumer retr
 internal/config/     env config and logger
 internal/testutil/   test database and queue isolation
 internal/e2e/        end-to-end tests, everything in one process
-migrations/          numbered .sql files, embedded and applied at startup (runner lives here to avoid an import cycle in tests)
 scripts/             publish_update.sh
 ```
 
@@ -197,7 +200,13 @@ handler panic) are `Nack(requeue=false)`ed into `task_updates.dlq` through
 
 **Plain SQL with pgx, no ORM.** The guarantees here (conditional updates,
 `SKIP LOCKED`, `ON CONFLICT DO NOTHING`, partial indexes, keyset pagination)
-are SQL features, and keeping them as SQL in `internal/store` keeps them visible.
+are SQL features, and keeping them as SQL in `internal/store/postgres` keeps them visible.
+
+**The database is swappable.** Everything outside `internal/store/<provider>`
+depends only on the `store.Store` interface, and `DB_DRIVER` picks the
+provider at startup. A new provider passes the shared conformance suite and
+then the full test suite (`make test-memory` shows this for the in-memory
+one). See [docs/database-providers.md](docs/database-providers.md).
 
 **chi, not the stdlib mux.** A thin `net/http`-compatible router with route
 groups, URL params and JSON 404/405 handlers; handlers stay plain

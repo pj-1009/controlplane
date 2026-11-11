@@ -1,122 +1,109 @@
-// Package store is the PostgreSQL repository for tenants, tasks, the outbox
-// and processed message ids. All SQL lives here.
+// Package store defines the persistence contract of the control plane. It
+// holds no database code: each provider lives in its own package
+// (store/postgres, store/memory) and implements Store, and store/drivers
+// picks one by name. The rest of the code depends only on this package.
 package store
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pj-1009/controlplane/internal/domain"
 )
 
+// Store is everything the control plane needs from its database.
+//
+// Every implementation must keep these guarantees; the shared test suite in
+// store/storetest checks them, and a new provider is done when it passes:
+//
+//   - Each write is atomic. CreateTenant, UpdateTenant and DeleteTenant store
+//     the tenant change, its task and its outbox message together or not at
+//     all. ApplyUpdate records the message id, the task change and any tenant
+//     change together or not at all.
+//   - Races have exactly one winner. Two creates with the same slug, or two
+//     updates with the same version, can't both succeed, even across
+//     processes.
+//   - Errors are the domain sentinels (domain.ErrTenantNotFound,
+//     domain.ErrTenantAlreadyExists, ...), never driver errors, so the API's
+//     error mapping works with any provider.
+//   - Lists are ordered by (created_at, id) and paged with Cursor.
+type Store interface {
+	// CreateTenant inserts a tenant in status provisioning with a deploy task.
+	// A taken slug, including one of a destroyed tenant, returns
+	// domain.ErrTenantAlreadyExists.
+	CreateTenant(ctx context.Context, slug, name string) (domain.Tenant, domain.Task, error)
+	// UpdateTenant moves an active tenant whose version matches to updating
+	// and creates an update task carrying the new name. The tenant keeps its
+	// current name until ApplyUpdate sees that task done.
+	UpdateTenant(ctx context.Context, id uuid.UUID, name string, version int64) (domain.Tenant, domain.Task, error)
+	// DeleteTenant moves an active or failed tenant to destroying and creates
+	// a destroy task. Tenants are never removed.
+	DeleteTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, domain.Task, error)
+	GetTenant(ctx context.Context, id uuid.UUID) (domain.Tenant, error)
+	ListTenants(ctx context.Context, f TenantFilter) (Page[domain.Tenant], error)
+
+	GetTask(ctx context.Context, id uuid.UUID) (domain.Task, error)
+	ListTasks(ctx context.Context, f TaskFilter) (Page[domain.Task], error)
+
+	// ApplyUpdate applies a worker status update exactly once per message id.
+	// It only moves a task forward, and moves the tenant when the task ends.
+	ApplyUpdate(ctx context.Context, msg domain.UpdateMessage) (UpdateResult, error)
+
+	// RelayOutbox hands up to limit unsent outbox messages, oldest first, to
+	// publish, and marks the ones that published as sent. It stops at the
+	// first publish error and returns it. Concurrent relays must not send the
+	// same message at the same time.
+	RelayOutbox(ctx context.Context, limit int, publish func(context.Context, OutboxMessage) error) (int, error)
+	// UnsentOutboxCount returns how many outbox messages are waiting.
+	UnsentOutboxCount(ctx context.Context) (int, error)
+
+	// Ping reports whether the database is reachable.
+	Ping(ctx context.Context) error
+	// Close releases the connections.
+	Close()
+}
+
+// TenantFilter narrows ListTenants. Zero values mean "no filter".
+type TenantFilter struct {
+	Status domain.TenantStatus
+	Limit  int
+	After  *Cursor
+}
+
+// TaskFilter narrows ListTasks. Zero values mean "no filter".
+type TaskFilter struct {
+	TenantID uuid.UUID
+	Status   domain.TaskStatus
+	Type     domain.TaskType
+	Limit    int
+	After    *Cursor
+}
+
+// OutboxMessage is an unsent outbox entry.
+type OutboxMessage struct {
+	ID      int64
+	TaskID  uuid.UUID
+	Payload []byte
+}
+
+// UpdateOutcome says what ApplyUpdate did with a message.
+type UpdateOutcome string
+
+// Update outcomes.
 const (
-	pgUniqueViolation  = "23505"
-	slugConstraint     = "tenants_slug_key"
-	openTaskConstraint = "tasks_one_open_per_tenant"
+	// OutcomeApplied means the task (and maybe the tenant) changed.
+	OutcomeApplied UpdateOutcome = "applied"
+	// OutcomeDuplicate means this message_id was processed before.
+	OutcomeDuplicate UpdateOutcome = "duplicate"
+	// OutcomeStale means the task is already at the same or a later status.
+	OutcomeStale UpdateOutcome = "stale"
 )
 
-// Store wraps a pgx connection pool.
-type Store struct {
-	pool *pgxpool.Pool
-}
-
-// New returns a Store backed by pool.
-func New(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool}
-}
-
-// Ping checks that the database is reachable.
-func (s *Store) Ping(ctx context.Context) error {
-	return s.pool.Ping(ctx)
-}
-
-// Connect opens a pool and verifies the connection, retrying until ctx is
-// done so the process can start before the database is ready. Each failed
-// attempt is logged, so a wrong password or host shows up in the logs
-// instead of looking like a silent hang.
-func Connect(ctx context.Context, url string, logger *slog.Logger) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
-	}
-	delay := 250 * time.Millisecond
-	for attempt := 1; ; attempt++ {
-		err := pool.Ping(ctx)
-		if err == nil {
-			logger.InfoContext(ctx, "database connected", "attempts", attempt)
-			return pool, nil
-		}
-		logger.WarnContext(ctx, "database not ready, retrying",
-			"attempt", attempt, "retry_in", delay.String(), "error", err)
-		select {
-		case <-ctx.Done():
-			pool.Close()
-			return nil, fmt.Errorf("connect to database: %w", errors.Join(err, ctx.Err()))
-		case <-time.After(delay):
-		}
-		delay = min(delay*2, 5*time.Second)
-	}
-}
-
-func isUniqueViolation(err error, constraint string) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == constraint
-}
-
-// insertTaskWithOutbox creates a task and its outbox row in tx.
-//
-// The outbox row is written in the same transaction as the tenant and task
-// changes, so either all of them commit or none do. Publishing happens later
-// in the relay; the HTTP request never talks to the broker.
-//
-// requestedName is the new tenant name for an update task, nil otherwise.
-func insertTaskWithOutbox(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, typ domain.TaskType, requestedName *string) (domain.Task, error) {
-	row := tx.QueryRow(ctx, `
-		INSERT INTO tasks (type, tenant_id, status, requested_name)
-		VALUES ($1, $2, $3, $4)
-		RETURNING `+taskColumns,
-		string(typ), tenantID, string(domain.TaskAccepted), requestedName)
-	task, err := scanTask(row)
-	if err != nil {
-		if isUniqueViolation(err, openTaskConstraint) {
-			return domain.Task{}, domain.ErrTenantUpdateNotAllowed
-		}
-		return domain.Task{}, fmt.Errorf("insert task: %w", err)
-	}
-
-	payload, err := json.Marshal(domain.NewTaskMessage(task))
-	if err != nil {
-		return domain.Task{}, fmt.Errorf("marshal task message: %w", err)
-	}
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO outbox (task_id, payload) VALUES ($1, $2)`, task.ID, payload,
-	); err != nil {
-		return domain.Task{}, fmt.Errorf("insert outbox row: %w", err)
-	}
-	return task, nil
-}
-
-func tenantStatusStrings(statuses []domain.TenantStatus) []string {
-	out := make([]string, len(statuses))
-	for i, s := range statuses {
-		out[i] = string(s)
-	}
-	return out
-}
-
-func taskStatusStrings(statuses []domain.TaskStatus) []string {
-	out := make([]string, len(statuses))
-	for i, s := range statuses {
-		out[i] = string(s)
-	}
-	return out
+// UpdateResult describes the effect of ApplyUpdate.
+type UpdateResult struct {
+	Outcome UpdateOutcome
+	Task    domain.Task
+	// Tenant is set only when a terminal task status moved the tenant.
+	Tenant *domain.Tenant
 }

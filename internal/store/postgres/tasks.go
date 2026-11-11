@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
 )
 
 const taskColumns = `id, type, tenant_id, status, error, requested_name, created_at, updated_at`
@@ -42,18 +43,9 @@ func (s *Store) GetTask(ctx context.Context, id uuid.UUID) (domain.Task, error) 
 	return t, nil
 }
 
-// TaskFilter narrows ListTasks. Zero values mean "no filter".
-type TaskFilter struct {
-	TenantID uuid.UUID
-	Status   domain.TaskStatus
-	Type     domain.TaskType
-	Limit    int
-	After    *Cursor
-}
-
 // ListTasks returns tasks ordered by (created_at, id).
-func (s *Store) ListTasks(ctx context.Context, f TaskFilter) (Page[domain.Task], error) {
-	limit := clampLimit(f.Limit)
+func (s *Store) ListTasks(ctx context.Context, f store.TaskFilter) (store.Page[domain.Task], error) {
+	limit := store.ClampLimit(f.Limit)
 	var afterTime *time.Time
 	var afterID *uuid.UUID
 	if f.After != nil {
@@ -75,14 +67,14 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) (Page[domain.Task],
 		LIMIT $6`,
 		tenantID, nullable(string(f.Status)), nullable(string(f.Type)), afterTime, afterID, limit+1)
 	if err != nil {
-		return Page[domain.Task]{}, fmt.Errorf("list tasks: %w", err)
+		return store.Page[domain.Task]{}, fmt.Errorf("list tasks: %w", err)
 	}
 	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Task, error) { return scanTask(r) })
 	if err != nil {
-		return Page[domain.Task]{}, fmt.Errorf("list tasks: %w", err)
+		return store.Page[domain.Task]{}, fmt.Errorf("list tasks: %w", err)
 	}
-	return paginate(items, limit, func(t domain.Task) Cursor {
-		return Cursor{CreatedAt: t.CreatedAt.Time, ID: t.ID}
+	return store.Paginate(items, limit, func(t domain.Task) store.Cursor {
+		return store.Cursor{CreatedAt: t.CreatedAt.Time, ID: t.ID}
 	}), nil
 }
 

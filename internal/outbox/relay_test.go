@@ -14,12 +14,11 @@ import (
 	"github.com/pj-1009/controlplane/internal/broker"
 	"github.com/pj-1009/controlplane/internal/domain"
 	"github.com/pj-1009/controlplane/internal/outbox"
-	"github.com/pj-1009/controlplane/internal/store"
 	"github.com/pj-1009/controlplane/internal/testutil"
 )
 
 func TestRelayPublishesAndMarksSent(t *testing.T) {
-	st := store.New(testutil.DB(t))
+	st := testutil.Store(t)
 	conn := testutil.Broker(t, "test-relay")
 	ctx := testutil.Context(t)
 	queue := conn.Topology().Tasks
@@ -74,7 +73,7 @@ func (p *failingPublisher) Publish(ctx context.Context, queue, id string, body [
 }
 
 func TestRelayResendsAfterCrashBeforeMarkingSent(t *testing.T) {
-	st := store.New(testutil.DB(t))
+	st := testutil.Store(t)
 	conn := testutil.Broker(t, "test-relay-crash")
 	ctx := testutil.Context(t)
 	queue := conn.Topology().Tasks

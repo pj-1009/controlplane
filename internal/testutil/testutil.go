@@ -1,4 +1,4 @@
-// Package testutil sets up isolated Postgres and RabbitMQ resources for
+// Package testutil sets up isolated stores and RabbitMQ resources for
 // integration tests.
 package testutil
 
@@ -18,7 +18,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pj-1009/controlplane/migrations"
+	"github.com/pj-1009/controlplane/internal/store"
+	"github.com/pj-1009/controlplane/internal/store/memory"
+	"github.com/pj-1009/controlplane/internal/store/postgres"
+	"github.com/pj-1009/controlplane/internal/store/postgres/migrations"
 )
 
 // Env var names set by the "test" service in docker-compose.yml.
@@ -26,6 +29,9 @@ const (
 	EnvDatabaseURL      = "TEST_DATABASE_URL"
 	EnvAdminDatabaseURL = "TEST_ADMIN_DATABASE_URL"
 	EnvAMQPURL          = "TEST_AMQP_URL"
+	// EnvDBDriver picks the store provider for Store: "postgres" (default)
+	// or "memory". `make test-memory` sets it.
+	EnvDBDriver = "TEST_DB_DRIVER"
 )
 
 func requireEnv(t *testing.T, key string) string {
@@ -43,6 +49,21 @@ func Context(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
 	return ctx
+}
+
+// Store returns an empty store from the provider named by TEST_DB_DRIVER, so
+// the same tests can run against every provider.
+func Store(t *testing.T) store.Store {
+	t.Helper()
+	switch driver := os.Getenv(EnvDBDriver); driver {
+	case "", "postgres":
+		return postgres.New(DB(t))
+	case "memory":
+		return memory.New()
+	default:
+		t.Fatalf("unknown %s %q", EnvDBDriver, driver)
+		return nil
+	}
 }
 
 // DB returns a pool for the dedicated test database, creating and migrating

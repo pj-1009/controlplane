@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -8,28 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/pj-1009/controlplane/internal/domain"
+	"github.com/pj-1009/controlplane/internal/store"
 )
-
-// UpdateOutcome says what ApplyUpdate did with a message.
-type UpdateOutcome string
-
-// Update outcomes.
-const (
-	// OutcomeApplied means the task (and maybe the tenant) changed.
-	OutcomeApplied UpdateOutcome = "applied"
-	// OutcomeDuplicate means this message_id was processed before.
-	OutcomeDuplicate UpdateOutcome = "duplicate"
-	// OutcomeStale means the task is already at the same or a later status.
-	OutcomeStale UpdateOutcome = "stale"
-)
-
-// UpdateResult describes the effect of ApplyUpdate.
-type UpdateResult struct {
-	Outcome UpdateOutcome
-	Task    domain.Task
-	// Tenant is set only when a terminal task status moved the tenant.
-	Tenant *domain.Tenant
-}
 
 var errDuplicate = errors.New("duplicate message")
 
@@ -43,8 +23,8 @@ var errDuplicate = errors.New("duplicate message")
 // It returns domain.ErrTaskNotFound for an unknown task and
 // domain.ErrInvalidTransition if the tenant is not in the state the task
 // expects. Both are permanent: retrying the same message cannot succeed.
-func (s *Store) ApplyUpdate(ctx context.Context, msg domain.UpdateMessage) (UpdateResult, error) {
-	var result UpdateResult
+func (s *Store) ApplyUpdate(ctx context.Context, msg domain.UpdateMessage) (store.UpdateResult, error) {
+	var result store.UpdateResult
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx,
 			`INSERT INTO processed_messages (message_id) VALUES ($1) ON CONFLICT DO NOTHING`, msg.MessageID)
@@ -76,13 +56,13 @@ func (s *Store) ApplyUpdate(ctx context.Context, msg domain.UpdateMessage) (Upda
 				return fmt.Errorf("re-read task: %w", err)
 			}
 			// Stale: commit anyway so the message_id stays recorded.
-			result = UpdateResult{Outcome: OutcomeStale, Task: task}
+			result = store.UpdateResult{Outcome: store.OutcomeStale, Task: task}
 			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("update task: %w", err)
 		}
-		result = UpdateResult{Outcome: OutcomeApplied, Task: task}
+		result = store.UpdateResult{Outcome: store.OutcomeApplied, Task: task}
 
 		if !task.Status.IsTerminal() {
 			return nil
@@ -115,10 +95,10 @@ func (s *Store) ApplyUpdate(ctx context.Context, msg domain.UpdateMessage) (Upda
 		return nil
 	})
 	if errors.Is(err, errDuplicate) {
-		return UpdateResult{Outcome: OutcomeDuplicate}, nil
+		return store.UpdateResult{Outcome: store.OutcomeDuplicate}, nil
 	}
 	if err != nil {
-		return UpdateResult{}, err
+		return store.UpdateResult{}, err
 	}
 	return result, nil
 }

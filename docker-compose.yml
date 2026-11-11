@@ -40,6 +40,7 @@ services:
       target: controlplane
     environment:
       HTTP_ADDR: ":8000"
+      DB_DRIVER: ${DB_DRIVER:-postgres}
       DATABASE_URL: *db-url
       AMQP_URL: *amqp-url
       RELAY_INTERVAL: ${RELAY_INTERVAL:-500ms}

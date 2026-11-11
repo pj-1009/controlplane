@@ -60,8 +60,9 @@ type Page[T any] struct {
 	NextCursor *Cursor
 }
 
-// paginate trims a limit+1 result to limit and computes the next cursor.
-func paginate[T any](rows []T, limit int, key func(T) Cursor) Page[T] {
+// Paginate trims a result of up to limit+1 rows to limit and computes the
+// next cursor. Providers fetch one extra row to know whether a next page exists.
+func Paginate[T any](rows []T, limit int, key func(T) Cursor) Page[T] {
 	if len(rows) <= limit {
 		return Page[T]{Items: rows}
 	}
@@ -70,7 +71,8 @@ func paginate[T any](rows []T, limit int, key func(T) Cursor) Page[T] {
 	return Page[T]{Items: rows, NextCursor: &next}
 }
 
-func clampLimit(limit int) int {
+// ClampLimit applies DefaultLimit and MaxLimit to a requested page size.
+func ClampLimit(limit int) int {
 	if limit <= 0 {
 		return DefaultLimit
 	}

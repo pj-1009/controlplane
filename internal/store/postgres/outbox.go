@@ -1,19 +1,13 @@
-package store
+package postgres
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-)
 
-// OutboxMessage is an unsent row from the outbox table.
-type OutboxMessage struct {
-	ID      int64
-	TaskID  uuid.UUID
-	Payload []byte
-}
+	"github.com/pj-1009/controlplane/internal/store"
+)
 
 // RelayOutbox claims up to limit unsent outbox rows, calls publish for each
 // in id order, and marks the ones that published successfully as sent, all
@@ -23,7 +17,7 @@ type OutboxMessage struct {
 // FOR UPDATE SKIP LOCKED lets several relays run without sending the same
 // row twice at the same time. A crash after publishing but before commit
 // does resend a row later: delivery is at-least-once, and consumers dedupe.
-func (s *Store) RelayOutbox(ctx context.Context, limit int, publish func(context.Context, OutboxMessage) error) (int, error) {
+func (s *Store) RelayOutbox(ctx context.Context, limit int, publish func(context.Context, store.OutboxMessage) error) (int, error) {
 	var (
 		sent       []int64
 		publishErr error
@@ -39,8 +33,8 @@ func (s *Store) RelayOutbox(ctx context.Context, limit int, publish func(context
 		if err != nil {
 			return fmt.Errorf("select outbox: %w", err)
 		}
-		batch, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (OutboxMessage, error) {
-			var m OutboxMessage
+		batch, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (store.OutboxMessage, error) {
+			var m store.OutboxMessage
 			err := r.Scan(&m.ID, &m.TaskID, &m.Payload)
 			return m, err
 		})

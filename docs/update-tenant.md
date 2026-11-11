@@ -136,7 +136,7 @@ created, not ten. `make race` runs the same test with 20 requests.
 ### Why it works
 
 The whole check and the change are **one SQL statement**
-([`internal/store/tenants.go`](../internal/store/tenants.go), `UpdateTenant`;
+([`internal/store/postgres/tenants.go`](../internal/store/postgres/tenants.go), `UpdateTenant`;
 simplified here, the real query passes the statuses as parameters):
 
 ```sql
@@ -152,7 +152,7 @@ separate check. In the same transaction, the winner inserts the update task
 carrying the requested name.
 
 When the worker reports the task `done`, the consumer applies the name
-([`internal/store/updates.go`](../internal/store/updates.go), `ApplyUpdate`):
+([`internal/store/postgres/updates.go`](../internal/store/postgres/updates.go), `ApplyUpdate`):
 
 ```sql
 UPDATE tenants

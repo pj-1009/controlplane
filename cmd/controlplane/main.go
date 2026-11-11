@@ -21,8 +21,7 @@ import (
 	"github.com/pj-1009/controlplane/internal/config"
 	"github.com/pj-1009/controlplane/internal/consumer"
 	"github.com/pj-1009/controlplane/internal/outbox"
-	"github.com/pj-1009/controlplane/internal/store"
-	"github.com/pj-1009/controlplane/migrations"
+	"github.com/pj-1009/controlplane/internal/store/drivers"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -50,19 +49,13 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := store.Connect(ctx, cfg.DatabaseURL, logger)
+	// The only line that knows which database is used: DB_DRIVER picks it.
+	st, err := drivers.Open(ctx, cfg.DBDriver, cfg.DatabaseURL, logger)
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
+	defer st.Close()
 
-	applied, err := migrations.Apply(ctx, pool)
-	if err != nil {
-		return err
-	}
-	logger.Info("migrations applied", "new", applied)
-
-	st := store.New(pool)
 	conn := broker.NewConn(cfg.AMQPURL, "controlplane", broker.DefaultTopology(), logger)
 	relay := outbox.NewRelay(st, broker.NewPublisher(conn), conn.Topology().Tasks, cfg.RelayInterval, logger)
 	updates := consumer.New(st, conn, logger)

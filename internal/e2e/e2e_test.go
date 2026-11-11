@@ -31,7 +31,7 @@ import (
 type stack struct {
 	t     *testing.T
 	url   string
-	store *store.Store
+	store store.Store
 	conn  *broker.Conn
 }
 
@@ -52,7 +52,7 @@ func background(t *testing.T, fn func(ctx context.Context) error) (stop func()) 
 
 func newStack(t *testing.T) *stack {
 	t.Helper()
-	st := store.New(testutil.DB(t))
+	st := testutil.Store(t)
 	conn := testutil.Broker(t, "test-e2e")
 	logger := testutil.Logger(t)
 

@@ -30,13 +30,13 @@ var timestampPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\
 type env struct {
 	t        *testing.T
 	url      string
-	store    *store.Store
+	store    store.Store
 	contract *spec.Contract
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st := store.New(testutil.DB(t))
+	st := testutil.Store(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	srv := httptest.NewServer(api.NewRouter(st, logger, api.HealthCheck{Name: "database", Check: st.Ping}))
 	t.Cleanup(srv.Close)

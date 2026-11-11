@@ -26,7 +26,7 @@ import (
 type env struct {
 	t     *testing.T
 	ctx   context.Context
-	store *store.Store
+	store store.Store
 	topo  broker.Topology
 	ch    *amqp.Channel
 }
@@ -35,7 +35,7 @@ type env struct {
 // topology. wrap lets a test put a fake in front of the real store.
 func newEnv(t *testing.T, wrap func(consumer.Store) consumer.Store) *env {
 	t.Helper()
-	st := store.New(testutil.DB(t))
+	st := testutil.Store(t)
 	conn := testutil.Broker(t, "test-consumer")
 	ctx := testutil.Context(t)
 

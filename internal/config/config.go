@@ -12,6 +12,7 @@ import (
 // Config holds everything the control plane process needs to start.
 type Config struct {
 	HTTPAddr      string
+	DBDriver      string
 	DatabaseURL   string
 	AMQPURL       string
 	RelayInterval time.Duration
@@ -23,10 +24,12 @@ type Config struct {
 func Load() (Config, error) {
 	cfg := Config{
 		HTTPAddr:    getenv("HTTP_ADDR", ":8000"),
+		DBDriver:    getenv("DB_DRIVER", "postgres"),
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		AMQPURL:     os.Getenv("AMQP_URL"),
 	}
-	if cfg.DatabaseURL == "" {
+	// The driver name itself is checked by drivers.Open, which knows the list.
+	if cfg.DatabaseURL == "" && cfg.DBDriver != "memory" {
 		return Config{}, errors.New("DATABASE_URL is required")
 	}
 	if cfg.AMQPURL == "" {

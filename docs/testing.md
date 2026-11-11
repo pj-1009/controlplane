@@ -43,14 +43,19 @@ What the flags mean:
 The end of a passing run looks like this:
 
 ```
-=== RUN   TestRelayOutboxStopsAtFirstError
---- PASS: TestRelayOutboxStopsAtFirstError (0.04s)
+=== RUN   TestRolledBackTransactionLeavesNoOutboxRow
+--- PASS: TestRolledBackTransactionLeavesNoOutboxRow (0.04s)
 PASS
-ok  	github.com/pj-1009/controlplane/internal/store	1.381s
+ok  	github.com/pj-1009/controlplane/internal/store/postgres	1.574s
+?   	github.com/pj-1009/controlplane/internal/store/postgres/migrations	[no test files]
+?   	github.com/pj-1009/controlplane/internal/store/storetest	[no test files]
 ?   	github.com/pj-1009/controlplane/internal/testutil	[no test files]
 ?   	github.com/pj-1009/controlplane/internal/worker	[no test files]
-?   	github.com/pj-1009/controlplane/migrations	[no test files]
-Test results saved to test-results/test-20261105-064246.txt
+=== RUN   TestSpecIsValid
+--- PASS: TestSpecIsValid (0.03s)
+PASS
+ok  	github.com/pj-1009/controlplane/spec	1.043s
+Test results saved to test-results/test-20261110-115442.txt
 ```
 
 ## 2. Read the results
@@ -59,7 +64,7 @@ Each package ends with one line:
 
 | Line | Meaning |
 |---|---|
-| `ok  <package>  1.381s` | Every test in that package passed |
+| `ok  <package>  1.574s` | Every test in that package passed |
 | `FAIL <package>` | At least one test in that package failed |
 | `?   <package>  [no test files]` | The package has no tests of its own; it's covered by other packages' tests |
 
@@ -69,7 +74,7 @@ The saved file has the full output. To check it quickly:
 
 ```bash
 ls -t test-results/                                   # newest first
-grep -c -- '--- PASS' test-results/<file>.txt         # how many tests passed (202 in the run above)
+grep -c -- '--- PASS' test-results/<file>.txt         # how many tests passed (227 in the run above)
 grep -- '--- FAIL' test-results/<file>.txt            # which tests failed, if any
 grep -E '^(ok|FAIL)' test-results/<file>.txt          # one line per package
 ```
@@ -166,6 +171,7 @@ you why:
 | `make vuln` | govulncheck: known vulnerabilities in Go and every dependency | `No vulnerabilities found.` |
 | `make check` | `make lint`, then `make vuln`, then `make test`; stops at the first failure | all three of the above |
 | `make fmt` | Rewrites files to fix formatting (it changes files; it doesn't check) | — |
+| `make test-memory` | The API, consumer, relay and end-to-end tests on the in-memory store instead of Postgres (needs only RabbitMQ) | `ok` for the four packages |
 | `make race` | A standalone load test against the **running** stack (needs `make up`) | `OK: exactly one winner in each race.` |
 
 `make race` output:
@@ -195,7 +201,9 @@ your database.
 | `internal/retry` | unit | Backoff delays and jitter |
 | `cmd/worker` | unit | Worker flags, env vars and their validation |
 | `internal/api` | unit + integration | The panic recoverer and error mapping (unit). Every endpoint and error code, pagination, and three concurrency races against the real router and database (integration) |
-| `internal/store` | integration | Migrations, transactions (a rollback leaves no outbox row), optimistic locking, update outcomes, renames applied only when done, pagination |
+| `internal/store/storetest` | (suite) | The conformance suite every database provider runs: atomic writes, one winner per race, domain errors, update outcomes, renames applied only when done, pagination, outbox relay |
+| `internal/store/memory` | unit | The conformance suite against the in-memory provider |
+| `internal/store/postgres` | integration | The conformance suite against Postgres, plus migrations and a rolled-back transaction leaving no outbox row |
 | `internal/broker` | integration | Persistent publishing with confirms, idempotent queue setup, reconnecting after the connection is cut |
 | `internal/outbox` | integration | The relay publishes and marks rows sent; a crash before marking sent leads to a harmless resend |
 | `internal/consumer` | integration | Duplicates, stale updates, poison messages to the DLQ, panics, retries with backoff |

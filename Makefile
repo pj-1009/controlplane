@@ -12,7 +12,7 @@ DOCKER_GO := docker run --rm -v "$(CURDIR)":/src -w /src \
 	-v controlplane-tools-gobuild:/root/.cache/go-build \
 	-e GOFLAGS=-buildvcs=false
 
-.PHONY: up down clean logs test check lint vuln fmt worker-fail worker-normal race publish
+.PHONY: up down clean logs test test-memory check lint vuln fmt worker-fail worker-normal race publish
 
 # .env holds the local passwords and is git-ignored. It is created once from
 # .env.example with random passwords. Delete it only together with the volumes
@@ -47,6 +47,11 @@ test: .env ## Run the full test suite (with -race) against postgres + rabbitmq.
 	$(COMPOSE) run --rm test bash -c 'set -o pipefail; \
 		go test -race -p 1 -count=1 -v -tags integration ./... 2>&1 | tee $(TEST_REPORT)'
 	@echo "Test results saved to $(TEST_REPORT)"
+
+test-memory: .env ## Run the API, consumer, relay and end-to-end tests on the in-memory store.
+	$(COMPOSE) up -d --wait rabbitmq
+	$(COMPOSE) run --rm -e TEST_DB_DRIVER=memory test \
+		go test -race -count=1 -tags integration ./internal/api/ ./internal/consumer/ ./internal/outbox/ ./internal/e2e/
 
 lint:
 	$(DOCKER_GO) -v controlplane-tools-lint:/root/.cache/golangci-lint $(LINT_IMAGE) golangci-lint run ./...
